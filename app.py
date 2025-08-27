@@ -336,7 +336,7 @@ def get_brands():
             "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW", "")),
 
             # Toplam (opsiyonel)
-            "IL_ILCE_CIRO": float(r["IL_ILCE_CIRO"]) if "IL_ILCE_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_CIRO")) else Non    e,
+            "IL_ILCE_CIRO": float(r["IL_ILCE_CIRO"]) if "IL_ILCE_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_CIRO")) else None,
             "IL_ILCE_ADET": float(r["IL_ILCE_ADET"]) if "IL_ILCE_ADET" in df.columns and pd.notna(r.get("IL_ILCE_ADET")) else None,
             "IL_ILCE_TICKET_SIZE": float(r["IL_ILCE_TICKET_SIZE"]) if "IL_ILCE_TICKET_SIZE" in df.columns and pd.notna(r.get("IL_ILCE_TICKET_SIZE")) else None,
 
