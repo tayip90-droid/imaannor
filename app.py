@@ -26,11 +26,11 @@ PARTY_COLORS = {
 }
 DEFAULT_COLOR = "#f8f9f9"
 
-# === Excel dosya yolu ===
+# Excel dosya yolu
 DATA_EXCEL_PATH = os.path.join(app.root_path, "static", "BKM_MARKA_CIROLAR.xlsx")
 
 # ---------------------------
-# Yardımcılar (Geo)
+# Geo yardımcıları
 # ---------------------------
 
 def load_geojson(path):
@@ -45,19 +45,6 @@ def filter_polygons(geojson):
         if gtype in ("Polygon", "MultiPolygon"):
             feats.append(ft)
     return {"type": "FeatureCollection", "features": feats}
-
-def crop_to_largest_component(geojson):
-    for feature in geojson.get("features", []):
-        geom = feature.get("geometry") or {}
-        if geom.get("type") == "MultiPolygon":
-            try:
-                shapely_geom = shape(geom)
-                if getattr(shapely_geom, "geoms", None):
-                    largest = max(shapely_geom.geoms, key=lambda a: a.area)
-                    feature["geometry"] = largest.__geo_interface__
-            except Exception:
-                pass
-    return geojson
 
 def keep_significant_components(geojson, min_ratio=0.003):
     for ft in geojson.get("features", []):
@@ -78,6 +65,20 @@ def keep_significant_components(geojson, min_ratio=0.003):
                 pass
     return geojson
 
+def _keep_significant_parts_geom(geom, min_ratio=0.003):
+    try:
+        if geom.geom_type == "MultiPolygon":
+            parts = list(geom.geoms)
+            areas = [p.area for p in parts]
+            total = sum(areas) or 1.0
+            kept = [p for p, a in zip(parts, areas) if (a/total) >= min_ratio]
+            if not kept:
+                kept = [max(parts, key=lambda g: g.area)]
+            return kept[0] if len(kept) == 1 else MultiPolygon(kept)
+        return geom
+    except Exception:
+        return geom
+
 def get_first(props, keys):
     for k in keys:
         v = props.get(k)
@@ -86,9 +87,11 @@ def get_first(props, keys):
     return None
 
 def province_name_from_province(props):
+    # name:tr öncelikli
     keys = [
+        "name:tr",
         "NAME","name","NAME_1","NAME_TR","Il","IL","il","il_adi",
-        "province","prov_name","ADMIN_NAME","ADM1_TR","ADM1_EN","ADMIN","name:tr"
+        "province","prov_name","ADMIN_NAME","ADM1_TR","ADM1_EN","ADMIN"
     ]
     return get_first(props, keys)
 
@@ -100,8 +103,7 @@ def province_name_from_district(props):
         "Il","IL","il","il_adi",
         "ADMIN_NAME_1","PARENT_ADM","PARENT_NAME",
         "ADMIN","name:tr",
-        # Ek (noktalı İ dahil)
-        "İl",
+        "İl",  # noktalı büyük İ
         "ILCE_IL","ilce_il","Ilce_Il","il_ilce",
         "IL_ADI","IL_AD","Sehir","Şehir","SEHIR",
         "PARENT","PROVINCE","PROVINCIA"
@@ -175,7 +177,7 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         canon_norm_to_orig[norm] = p_name
     canon_keys = list(canon_norm_to_orig.keys())
 
-    # Group districts by province (from district properties)
+    # Group districts by province
     grouped = {}
     for dft in ilce_geojson.get("features", []):
         props = dft.get("properties", {}) or {}
@@ -191,9 +193,8 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         if norm in canon_norm_to_orig:
             grouped.setdefault(norm, []).append(dft)
 
-    # DEBUG: kaç district gruplandı?
-    grp_stats = {k: len(v) for k, v in grouped.items()}
-    print("[DEBUG] grouped district counts (by province norm):", grp_stats)
+    print("[DEBUG] grouped district counts (by province norm):",
+          {k: len(v) for k, v in grouped.items()})
 
     updated = 0; skipped = []
     for pft in il_geojson.get("features", []):
@@ -204,19 +205,39 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         p_norm = ALIASES.get(p_norm, p_norm)
         if p_norm not in grouped:
             skipped.append(p_name); continue
+
         geoms = []
         for dft in grouped[p_norm]:
             dgeom = dft.get("geometry")
             if not dgeom: continue
             try: geoms.append(shape(dgeom))
             except Exception: pass
-        if geoms:
+        if not geoms:
+            skipped.append(p_name); continue
+
+        try:
+            union_geom = unary_union(geoms)
+
+            # ORİJİNAL İL POLİGONUYLA CLIP → deniz taşması gider
+            orig = None
             try:
-                union_geom = unary_union(geoms)
-                pft["geometry"] = union_geom.__geo_interface__
-                updated += 1
+                if pft.get("geometry"):
+                    orig = shape(pft["geometry"])
             except Exception:
-                skipped.append(p_name)
+                orig = None
+            if orig:
+                try:
+                    union_geom = union_geom.intersection(orig.buffer(0))
+                except Exception:
+                    pass
+
+            # küçük parçaları at
+            union_geom = _keep_significant_parts_geom(union_geom, min_ratio=0.003)
+
+            pft["geometry"] = union_geom.__geo_interface__
+            updated += 1
+        except Exception:
+            skipped.append(p_name)
 
     il_geojson = keep_significant_components(il_geojson, min_ratio=0.003)
     print(f"[update_province_boundaries] updated={updated}, skipped={len(skipped)}")
@@ -257,7 +278,7 @@ def index():
     return render_template("map.html")
 
 @app.route("/get_boundaries")
-@cache.cached(key_prefix="get_boundaries_v10")  # v10: cache kır
+@cache.cached(key_prefix="get_boundaries_v11")  # cache kır
 def get_boundaries():
     base = os.path.join(app.root_path, "static")
     il_path = os.path.join(base, "updated_il_geojson.json")
@@ -269,7 +290,7 @@ def get_boundaries():
     il = load_geojson(il_path)
     ilce = load_geojson(ilce_path)
 
-    # Debug: property anahtar örnekleri
+    # Örnek property anahtarları
     sample_il = [list((f.get("properties") or {}).keys()) for f in il.get("features", [])[:3]]
     sample_ilce = [list((f.get("properties") or {}).keys()) for f in ilce.get("features", [])[:3]]
     print("[DEBUG] Province sample keys:", sample_il)
@@ -277,9 +298,11 @@ def get_boundaries():
 
     il = filter_polygons(il)
     ilce = filter_polygons(ilce)
-    ilce = crop_to_largest_component(ilce)
 
-    il = update_province_boundaries(il, ilce)  # dissolve etmeye çalış
+    # ÖNEMLİ: deniz seçilmesin diye budama yapmıyoruz
+    # ilce = crop_to_largest_component(ilce)
+
+    il = update_province_boundaries(il, ilce)
     il = dedupe_provinces(il)
 
     il = ensure_name_field(il, province_name_from_province, out_key="NAME")
@@ -292,12 +315,11 @@ def get_boundaries():
 
     ilce = colorize_districts(ilce)
 
-    # Son durum: kaç il skip?
     total = len(il.get("features", []))
-    skipped = [ft.get("properties", {}).get("NAME") for ft in il.get("features", []) if not ft.get("geometry")]
-    print(f"[DEBUG] Provinces total={total}, skipped={len(skipped)}")
-    if skipped:
-        print("[DEBUG] Skipped provinces list:", skipped)
+    skipped_provs = [ft.get("properties", {}).get("NAME") for ft in il.get("features", []) if not ft.get("geometry")]
+    print(f"[DEBUG] Provinces total={total}, skipped={len(skipped_provs)}")
+    if skipped_provs:
+        print("[DEBUG] Skipped provinces list:", skipped_provs)
 
     return jsonify({"il": il, "ilce": ilce, "party_colors": PARTY_COLORS, "default_color": DEFAULT_COLOR})
 
@@ -335,7 +357,7 @@ def _load_brands_df():
     mtime = os.path.getmtime(DATA_EXCEL_PATH)
     if _BRANDS_DF_CACHE["df"] is not None and _BRANDS_DF_CACHE["mtime"] == mtime:
         return _BRANDS_DF_CACHE["df"]
-    df = pd.read_excel(DATA_EXCEL_PATH)  # sheet_name gerekirse
+    df = pd.read_excel(DATA_EXCEL_PATH)
     _BRANDS_DF_CACHE["df"] = df
     _BRANDS_DF_CACHE["mtime"] = mtime
     return df
