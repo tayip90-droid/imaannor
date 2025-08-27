@@ -1,0 +1,457 @@
+[
+  {
+    "BKM_IL_ILCE_NEW": "01 - SEYHAN",
+    "IL": "Adana",
+    "ILCE": "SEYHAN",
+    "LAT": 36.915278,
+    "LON": 35.231111
+  },
+  {
+    "BKM_IL_ILCE_NEW": "01 - YUREGIR",
+    "IL": "Adana",
+    "ILCE": "YUREGIR",
+    "LAT": 36.88577,
+    "LON": 35.483214
+  },
+  {
+    "BKM_IL_ILCE_NEW": "06 - CANKAYA",
+    "IL": "Ankara",
+    "ILCE": "CANKAYA",
+    "LAT": 39.798098,
+    "LON": 32.945689
+  },
+  {
+    "BKM_IL_ILCE_NEW": "06 - ETIMESGUT",
+    "IL": "Ankara",
+    "ILCE": "ETIMESGUT",
+    "LAT": 39.867188,
+    "LON": 32.602279
+  },
+  {
+    "BKM_IL_ILCE_NEW": "06 - KECIOREN",
+    "IL": "Ankara",
+    "ILCE": "KECIOREN",
+    "LAT": 40.086504,
+    "LON": 32.834112
+  },
+  {
+    "BKM_IL_ILCE_NEW": "06 - YENIMAHALLE",
+    "IL": "Ankara",
+    "ILCE": "YENIMAHALLE",
+    "LAT": 40.008731,
+    "LON": 32.682443
+  },
+  {
+    "BKM_IL_ILCE_NEW": "07 - ALANYA",
+    "IL": "Antalya",
+    "ILCE": "ALANYA",
+    "LAT": 36.535554,
+    "LON": 32.284536
+  },
+  {
+    "BKM_IL_ILCE_NEW": "07 - KEPEZ",
+    "IL": "Antalya",
+    "ILCE": "KEPEZ",
+    "LAT": 37.024727,
+    "LON": 30.713339
+  },
+  {
+    "BKM_IL_ILCE_NEW": "07 - MURATPASA",
+    "IL": "Antalya",
+    "ILCE": "MURATPASA",
+    "LAT": 36.887104,
+    "LON": 30.737377
+  },
+  {
+    "BKM_IL_ILCE_NEW": "07 - SERIK",
+    "IL": "Antalya",
+    "ILCE": "SERIK",
+    "LAT": 37.102226,
+    "LON": 30.998465
+  },
+  {
+    "BKM_IL_ILCE_NEW": "16 - MUDANYA",
+    "IL": "Bursa",
+    "ILCE": "MUDANYA",
+    "LAT": 40.325485,
+    "LON": 28.769453
+  },
+  {
+    "BKM_IL_ILCE_NEW": "16 - NILUFER",
+    "IL": "Bursa",
+    "ILCE": "NILUFER",
+    "LAT": 40.182864,
+    "LON": 28.832399
+  },
+  {
+    "BKM_IL_ILCE_NEW": "16 - OSMANGAZI",
+    "IL": "Bursa",
+    "ILCE": "OSMANGAZI",
+    "LAT": 40.170897,
+    "LON": 29.020629
+  },
+  {
+    "BKM_IL_ILCE_NEW": "20 - PAMUKKALE",
+    "IL": "Denizli",
+    "ILCE": "PAMUKKALE",
+    "LAT": 37.881976,
+    "LON": 29.182904
+  },
+  {
+    "BKM_IL_ILCE_NEW": "25 - YAKUTIYE",
+    "IL": "Erzurum",
+    "ILCE": "YAKUTIYE",
+    "LAT": 40.068751,
+    "LON": 41.271408
+  },
+  {
+    "BKM_IL_ILCE_NEW": "26 - ODUNPAZARI",
+    "IL": "Eskişehir",
+    "ILCE": "ODUNPAZARI",
+    "LAT": 39.632173,
+    "LON": 30.573705
+  },
+  {
+    "BKM_IL_ILCE_NEW": "26 - TEPEBASI",
+    "IL": "Eskişehir",
+    "ILCE": "TEPEBASI",
+    "LAT": 39.824908,
+    "LON": 30.568763
+  },
+  {
+    "BKM_IL_ILCE_NEW": "28 - GIRESUN MERKEZ",
+    "IL": "Giresun",
+    "ILCE": "GIRESUN MERKEZ",
+    "LAT": 40.800634,
+    "LON": 38.372254
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - ARNAVUTKOY",
+    "IL": "İstanbul",
+    "ILCE": "ARNAVUTKOY",
+    "LAT": 41.248259,
+    "LON": 28.68145
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - ATASEHIR",
+    "IL": "İstanbul",
+    "ILCE": "ATASEHIR",
+    "LAT": 40.984492,
+    "LON": 29.145657
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BAHCELIEVLER",
+    "IL": "İstanbul",
+    "ILCE": "BAHCELIEVLER",
+    "LAT": 41.009795,
+    "LON": 28.838396
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BAKIRKOY",
+    "IL": "İstanbul",
+    "ILCE": "BAKIRKOY",
+    "LAT": 40.980905,
+    "LON": 28.832839
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BASAKSEHIR",
+    "IL": "İstanbul",
+    "ILCE": "BASAKSEHIR",
+    "LAT": 41.103228,
+    "LON": 28.772567
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BAYRAMPASA",
+    "IL": "İstanbul",
+    "ILCE": "BAYRAMPASA",
+    "LAT": 41.051452,
+    "LON": 28.898305
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BESIKTAS",
+    "IL": "İstanbul",
+    "ILCE": "BESIKTAS",
+    "LAT": 41.071618,
+    "LON": 29.030538
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BEYLIKDUZU",
+    "IL": "İstanbul",
+    "ILCE": "BEYLIKDUZU",
+    "LAT": 40.987951,
+    "LON": 28.64375
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - BEYOGLU",
+    "IL": "İstanbul",
+    "ILCE": "BEYOGLU",
+    "LAT": 41.04333,
+    "LON": 28.962669
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - ESENYURT",
+    "IL": "İstanbul",
+    "ILCE": "ESENYURT",
+    "LAT": 41.04892,
+    "LON": 28.658117
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - EYUPSULTAN",
+    "IL": "İstanbul",
+    "ILCE": "EYUPSULTAN",
+    "LAT": 41.165293,
+    "LON": 28.88316
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - FATIH",
+    "IL": "İstanbul",
+    "ILCE": "FATIH",
+    "LAT": 41.014462,
+    "LON": 28.954551
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - GAZIOSMANPASA",
+    "IL": "İstanbul",
+    "ILCE": "GAZIOSMANPASA",
+    "LAT": 41.073058,
+    "LON": 28.900558
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - GUNGOREN",
+    "IL": "İstanbul",
+    "ILCE": "GUNGOREN",
+    "LAT": 41.019822,
+    "LON": 28.874821
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - KADIKOY",
+    "IL": "İstanbul",
+    "ILCE": "KADIKOY",
+    "LAT": 40.981134,
+    "LON": 29.065075
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - KAGITHANE",
+    "IL": "İstanbul",
+    "ILCE": "KAGITHANE",
+    "LAT": 41.080637,
+    "LON": 28.985403
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - KARTAL",
+    "IL": "İstanbul",
+    "ILCE": "KARTAL",
+    "LAT": 40.915226,
+    "LON": 29.202842
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - KUCUKCEKMECE",
+    "IL": "İstanbul",
+    "ILCE": "KUCUKCEKMECE",
+    "LAT": 41.021033,
+    "LON": 28.776432
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - MALTEPE",
+    "IL": "İstanbul",
+    "ILCE": "MALTEPE",
+    "LAT": 40.944007,
+    "LON": 29.158974
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - PENDIK",
+    "IL": "İstanbul",
+    "ILCE": "PENDIK",
+    "LAT": 40.956376,
+    "LON": 29.354581
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - SARIYER",
+    "IL": "İstanbul",
+    "ILCE": "SARIYER",
+    "LAT": 41.171709,
+    "LON": 29.008363
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - SISLI",
+    "IL": "İstanbul",
+    "ILCE": "SISLI",
+    "LAT": 41.061914,
+    "LON": 28.984701
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - SULTANBEYLI",
+    "IL": "İstanbul",
+    "ILCE": "SULTANBEYLI",
+    "LAT": 40.968198,
+    "LON": 29.269814
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - UMRANIYE",
+    "IL": "İstanbul",
+    "ILCE": "UMRANIYE",
+    "LAT": 41.027219,
+    "LON": 29.127459
+  },
+  {
+    "BKM_IL_ILCE_NEW": "34 - USKUDAR",
+    "IL": "İstanbul",
+    "ILCE": "USKUDAR",
+    "LAT": 41.035221,
+    "LON": 29.057334
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - BALCOVA",
+    "IL": "İzmir",
+    "ILCE": "BALCOVA",
+    "LAT": 38.380478,
+    "LON": 27.055728
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - BORNOVA",
+    "IL": "İzmir",
+    "ILCE": "BORNOVA",
+    "LAT": 38.467898,
+    "LON": 27.260805
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - CESME",
+    "IL": "İzmir",
+    "ILCE": "CESME",
+    "LAT": 38.317365,
+    "LON": 26.448322
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - GAZIEMIR",
+    "IL": "İzmir",
+    "ILCE": "GAZIEMIR",
+    "LAT": 38.321982,
+    "LON": 27.132703
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - KARSIYAKA",
+    "IL": "İzmir",
+    "ILCE": "KARSIYAKA",
+    "LAT": 38.503471,
+    "LON": 27.113483
+  },
+  {
+    "BKM_IL_ILCE_NEW": "35 - KONAK",
+    "IL": "İzmir",
+    "ILCE": "KONAK",
+    "LAT": 38.421975,
+    "LON": 27.154141
+  },
+  {
+    "BKM_IL_ILCE_NEW": "38 - MELIKGAZI",
+    "IL": "Kayseri",
+    "ILCE": "MELIKGAZI",
+    "LAT": 38.724321,
+    "LON": 35.639374
+  },
+  {
+    "BKM_IL_ILCE_NEW": "41 - BASISKELE",
+    "IL": "Kocaeli",
+    "ILCE": "BASISKELE",
+    "LAT": 40.645922,
+    "LON": 29.951741
+  },
+  {
+    "BKM_IL_ILCE_NEW": "41 - GEBZE",
+    "IL": "Kocaeli",
+    "ILCE": "GEBZE",
+    "LAT": 40.904615,
+    "LON": 29.515596
+  },
+  {
+    "BKM_IL_ILCE_NEW": "41 - IZMIT",
+    "IL": "Kocaeli",
+    "ILCE": "IZMIT",
+    "LAT": 40.846129,
+    "LON": 30.080981
+  },
+  {
+    "BKM_IL_ILCE_NEW": "42 - KARATAY",
+    "IL": "Konya",
+    "ILCE": "KARATAY",
+    "LAT": 37.957779,
+    "LON": 32.970864
+  },
+  {
+    "BKM_IL_ILCE_NEW": "42 - SELCUKLU",
+    "IL": "Konya",
+    "ILCE": "SELCUKLU",
+    "LAT": 38.099834,
+    "LON": 32.553021
+  },
+  {
+    "BKM_IL_ILCE_NEW": "46 - ONIKI SUBAT",
+    "IL": "Kahramanmaraş",
+    "ILCE": "ONIKI SUBAT",
+    "LAT": 37.669898,
+    "LON": 36.727172
+  },
+  {
+    "BKM_IL_ILCE_NEW": "46 - ONIKISUBAT",
+    "IL": "Kahramanmaraş",
+    "ILCE": "ONIKISUBAT",
+    "LAT": 37.669898,
+    "LON": 36.727172
+  },
+  {
+    "BKM_IL_ILCE_NEW": "48 - BODRUM",
+    "IL": "Muğla",
+    "ILCE": "BODRUM",
+    "LAT": 37.066816,
+    "LON": 27.48453
+  },
+  {
+    "BKM_IL_ILCE_NEW": "48 - MARMARIS",
+    "IL": "Muğla",
+    "ILCE": "MARMARIS",
+    "LAT": 36.789322,
+    "LON": 28.191841
+  },
+  {
+    "BKM_IL_ILCE_NEW": "48 - MILAS",
+    "IL": "Muğla",
+    "ILCE": "MILAS",
+    "LAT": 37.27455,
+    "LON": 27.80857
+  },
+  {
+    "BKM_IL_ILCE_NEW": "54 - KARASU",
+    "IL": "Sakarya",
+    "ILCE": "KARASU",
+    "LAT": 41.050644,
+    "LON": 30.691928
+  },
+  {
+    "BKM_IL_ILCE_NEW": "55 - CANIK",
+    "IL": "Samsun",
+    "ILCE": "CANIK",
+    "LAT": 41.174172,
+    "LON": 36.285809
+  },
+  {
+    "BKM_IL_ILCE_NEW": "55 - ILKADIM",
+    "IL": "Samsun",
+    "ILCE": "ILKADIM",
+    "LAT": 41.230966,
+    "LON": 36.188076
+  },
+  {
+    "BKM_IL_ILCE_NEW": "59 - CORLU",
+    "IL": "Tekirdağ",
+    "ILCE": "CORLU",
+    "LAT": 41.113756,
+    "LON": 27.750841
+  },
+  {
+    "BKM_IL_ILCE_NEW": "61 - ORTAHISAR",
+    "IL": "Trabzon",
+    "ILCE": "ORTAHISAR",
+    "LAT": 40.897707,
+    "LON": 39.758363
+  }
+]

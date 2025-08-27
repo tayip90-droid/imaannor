@@ -1,0 +1,6 @@
+Flask
+flask-caching
+pandas
+openpyxl        # .xlsx okumak için
+Shapely==2.0.4  # (ikili wheel var; GEOS sorunsuz)
+gunicorn        # üretimde WSGI sunucu

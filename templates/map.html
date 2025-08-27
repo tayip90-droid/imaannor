@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Türkiye Haritası</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --panel-w: 320px; --bg:#f6f7f9; --card:#fff; --text:#111827; --muted:#6b7280;
+      --border:#e5e7eb; --ring:#93c5fd; --shadow:0 8px 24px rgba(0,0,0,.08);
+      --radius:14px; --radius-sm:10px;
+    }
+    html, body { height:100%; margin:0; background:var(--bg); font-family:'Inter',system-ui; color:var(--text); }
+    #map { position:absolute; inset:0; }
+    /* Tooltip her şeyin üstünde olsun */
+    .leaflet-tooltip { z-index: 10000; }
+
+    .control-panel{ position:absolute; top:16px; left:16px; width:var(--panel-w); background:var(--card);
+      border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); z-index:1000;
+      display:grid; grid-template-rows:auto 1fr; max-height:calc(100% - 32px); overflow:hidden; }
+    .panel-header{ padding:14px 16px 12px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#fff 0%,#fbfdff 100%); }
+    .panel-title{ font-size:14px; font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px; }
+    .panel-sub{ color:var(--muted); font-size:12px; margin-top:2px; }
+    .panel-body{ padding:12px; overflow:auto; }
+    .section{ background:#fff; border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px; }
+    .section-title{ font-weight:600; font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+    .hr{ height:1px; background:var(--border); margin:10px 0; }
+    .control-panel select, .control-panel button{ width:100%; font-size:13px; border-radius:10px; border:1px solid var(--border); background:#fff; padding:10px 12px; outline:none; transition:box-shadow .2s,border-color .2s; cursor:pointer; }
+    .control-panel select:focus, .control-panel button:focus{ border-color:var(--ring); box-shadow:0 0 0 3px rgba(147,197,253,.35); }
+    .btn-ghost{ background:#fff; } .btn-ghost:hover{ background:#f3f4f6; }
+    .brand-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; }
+    .brand-row input[type="checkbox"]{ accent-color:#0ea5e9; width:16px; height:16px; }
+    .legend{ background:#fff; padding:10px 12px; border:1px solid var(--border); line-height:1.35; box-shadow:var(--shadow); font-size:12px; border-radius:10px; }
+    .legend .title{ font-weight:700; margin-bottom:6px; }
+    .legend .item{ display:flex; align-items:center; gap:8px; margin:4px 0; }
+    .legend .swatch{ width:14px; height:14px; border:1px solid rgba(0,0,0,.2); border-radius:3px; box-sizing:border-box; }
+    .metric-summary{ font-size:12px; line-height:1.5; background:#fbfbfd; border:1px solid var(--border); border-radius:10px; padding:8px; }
+    .metric-summary .row{ display:flex; justify-content:space-between; gap:10px; margin:2px 0; }
+    .metric-summary .row .k{ color:var(--muted); } .metric-summary .row .v{ font-weight:700; }
+    .label { font-size:10px; font-weight:700; color:#111; text-shadow: none; white-space:nowrap; pointer-events:none; }
+
+    /* Donut iç ölçekleyici */
+    .pie-scale{
+      transform-origin: center center;
+      will-change: transform;
+      transition: transform .12s ease;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="control-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M4 7h16M4 12h16M4 17h10" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round"/></svg>
+        Harita Kontrolleri
+      </div>
+      <div class="panel-sub">Sınırlar, marka noktaları ve metrik özetleri</div>
+    </div>
+
+    <div class="panel-body">
+      <div class="section">
+        <div class="section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2v-9z" stroke="#6b7280" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          Sınır Gösterimi
+        </div>
+        <select id="modeSelect">
+          <option value="il" selected>İl bazlı çiz</option>
+          <option value="ilce">İlçe bazlı çiz (İstanbul)</option>
+        </select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
+          <button id="toggleColors" class="btn-ghost">Oy dağılımını göster</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l3 7h7l-5.5 4 2.5 7-7-4.5L5 20l2.5-7L2 9h7l3-7z" stroke="#6b7280" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          Marka Noktaları
+        </div>
+        <div class="brand-row"><label>Imannoor</label><input type="checkbox" class="brandChk" value="IMANNOOR" checked></div>
+        <div class="brand-row"><label>Vakko</label><input type="checkbox" class="brandChk" value="VAKKO" checked></div>
+        <div class="brand-row"><label>Aker</label><input type="checkbox" class="brandChk" value="AKER" checked></div>
+        <div class="brand-row"><label>Armine</label><input type="checkbox" class="brandChk" value="ARMİNE" checked></div>
+
+        <div class="hr"></div>
+        <label style="font-size:12px; color:#6b7280;">Boyutlandırma</label>
+        <select id="metricSelect" style="margin-top:6px;">
+          <option value="none">Sabit boyut</option>
+          <option value="IL_ILCE_CIRO">Ciro (Toplam)</option>
+          <option value="IL_ILCE_ADET">Adet (Toplam)</option>
+          <option value="IL_ILCE_TICKET_SIZE">Ticket Size (Toplam)</option>
+          <optgroup label="E-Ticaret">
+            <option value="IL_ILCE_ECOM_CIRO">E-Com Ciro</option>
+            <option value="IL_ILCE_ECOM_ADET">E-Com Adet</option>
+            <option value="IL_ILCE_ECOM_TICKET_SIZE">E-Com Ticket Size</option>
+          </optgroup>
+          <optgroup label="Fiziki">
+            <option value="IL_ILCE_FIZIKI_CIRO">Fiziki Ciro</option>
+            <option value="IL_ILCE_FIZIKI_ADET">Fiziki Adet</option>
+            <option value="IL_ILCE_FIZIKI_TICKET_SIZE">Fiziki Ticket Size</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 20V8m6 12V4m6 16v-6" stroke="#6b7280" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Metrik Özeti
+        </div>
+        <div id="metricSummary" class="metric-summary">
+          <div class="row"><span class="k">Metrik:</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Nokta sayısı:</span><span class="v">—</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">E-Com Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="row"><span class="k">Fiziki Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="row"><span class="k">Toplam Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">Min / Maks:</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Q33 / Q66:</span><span class="v">—</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">Küçük (≤ Q33):</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Orta (Q33–Q66):</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Büyük (≥ Q66):</span><span class="v">—</span></div>
+          <div style="margin-top:6px; color:#666; font-size:11px;">Eşikler veri dağılımından otomatik hesaplanır.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', { zoomControl: true }).setView([41.0, 29.0], 8);
+
+    // Panes
+    map.createPane('panePolygons');   map.getPane('panePolygons').style.zIndex = 400;
+    map.createPane('paneDistricts');  map.getPane('paneDistricts').style.zIndex = 410;
+    map.createPane('paneLabels');     map.getPane('paneLabels').style.zIndex = 600;
+    map.createPane('paneMarkers');    map.getPane('paneMarkers').style.zIndex = 650;
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    }).addTo(map);
+
+    let ilLayer, istIlceLayer, districtLabelsLayer;
+    let partyLegendControl = null;   // bottomright
+    let brandLegendControl = null;   // topright
+
+    let renkliIl = false, renkliIlce = false, currentMode = 'il';
+    let PARTY_COLORS = {}, DEFAULT_COLOR = '#bdc3c7';
+
+    // Brand layer & colors
+    let brandLayer = L.layerGroup([], { pane: 'paneMarkers' }).addTo(map);
+    let allBrandPoints = [];
+
+    const BRAND_COLORS = {
+      "IMANNOOR": "#9F854C", "Imannoor": "#9F854C",      // altın
+      "VAKKO": "#5B3A82", "Vakko": "#5B3A82",           // mor
+      "AKER": "#A86F2C",   "Aker": "#A86F2C",           // bakır (pembe değil)
+      "ARMİNE": "#0E7C86", "ARMINE": "#0E7C86", "Armine": "#0E7C86"  // teal
+    };
+
+    function displayBrandName(b){
+      const mapNames = { "IMANNOOR":"Imannoor", "VAKKO":"Vakko", "AKER":"Aker", "ARMİNE":"Armine", "ARMINE":"Armine" };
+      return mapNames[b] || b;
+    }
+    function brandColor(b){ return BRAND_COLORS[b] || BRAND_COLORS[displayBrandName(b)] || '#000'; }
+
+    // === Helpers ===
+    function fitTo(layer){ try{ map.fitBounds(layer.getBounds(), { padding:[10,10] }); }catch(e){} }
+    function isIstanbulName(v){
+      if(!v) return false;
+      const s = String(v).toLowerCase().replace('i̇','i').replace(/\(.*?\)/g,'').trim();
+      return s.includes('istanbul');
+    }
+    function formatInt(x){
+      if (x==null || isNaN(x)) return "-";
+      // tam sayıya çevirerek (virgül sonrası atılır)
+      return Math.floor(Number(x)).toLocaleString('tr-TR');
+    }
+    function formatPercent(x){
+      if (x==null || isNaN(x)) return "-";
+      let v = Number(x);
+      if (v <= 1) v *= 100;
+      return "%" + Math.round(v).toLocaleString('tr-TR');
+    }
+    function displayMetricName(k){
+      const mapn = {
+        'IL_ILCE_CIRO':'Ciro (Toplam)',
+        'IL_ILCE_ADET':'Adet (Toplam)',
+        'IL_ILCE_TICKET_SIZE':'Ticket Size (Toplam)',
+        'IL_ILCE_ECOM_CIRO':'E-Com Ciro',
+        'IL_ILCE_ECOM_ADET':'E-Com Adet',
+        'IL_ILCE_ECOM_TICKET_SIZE':'E-Com Ticket Size',
+        'IL_ILCE_FIZIKI_CIRO':'Fiziki Ciro',
+        'IL_ILCE_FIZIKI_ADET':'Fiziki Adet',
+        'IL_ILCE_FIZIKI_TICKET_SIZE':'Fiziki Ticket Size',
+        'none':'Sabit boyut'
+      };
+      return mapn[k] || k || '—';
+    }
+
+    // Legends
+    function showPartyLegend(){
+      if (!PARTY_COLORS) return;
+      if (partyLegendControl) { map.removeControl(partyLegendControl); partyLegendControl=null; }
+      partyLegendControl = L.control({ position:'bottomright' });
+      partyLegendControl.onAdd = function(){
+        const div = L.DomUtil.create('div','legend');
+        const entries = Object.entries(PARTY_COLORS).sort((a,b)=>a[0].localeCompare(b[0],'tr'));
+        div.innerHTML = '<div class="title">Parti Renkleri</div>';
+        for (const [party, color] of entries){
+          const row = document.createElement('div'); row.className='item';
+          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${party}</span>`;
+          div.appendChild(row);
+        }
+        const def = document.createElement('div'); def.className='item';
+        def.innerHTML = `<span class="swatch" style="background:${DEFAULT_COLOR}"></span><span>Veri yok / Belirsiz</span>`;
+        div.appendChild(def);
+        return div;
+      };
+      partyLegendControl.addTo(map);
+    }
+    function hidePartyLegend(){ if (partyLegendControl){ map.removeControl(partyLegendControl); partyLegendControl=null; } }
+
+    function showBrandLegend(selectedBrands){
+      if (brandLegendControl){ map.removeControl(brandLegendControl); brandLegendControl=null; }
+      brandLegendControl = L.control({ position:'topright' });
+      brandLegendControl.onAdd = function(){
+        const div = L.DomUtil.create('div','legend');
+        div.innerHTML = '<div class="title">Marka Renkleri</div>';
+        const list = (selectedBrands && selectedBrands.length)
+          ? Array.from(new Set(selectedBrands.map(b=>String(b))))
+          : ["IMANNOOR","VAKKO","AKER","ARMİNE"];
+        list.sort((a,b)=>displayBrandName(a).localeCompare(displayBrandName(b),'tr'));
+        list.forEach(br=>{
+          const color = brandColor(br);
+          const row = document.createElement('div'); row.className='item';
+          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${displayBrandName(br)}</span>`;
+          div.appendChild(row);
+        });
+        return div;
+      };
+      brandLegendControl.addTo(map);
+    }
+
+    // Quantile & summary
+    function quantile(sortedArr, q){
+      const n = sortedArr.length; if(!n) return null;
+      const pos = (n-1)*q, base=Math.floor(pos), rest=pos-base;
+      return (sortedArr[base+1]!==undefined) ? sortedArr[base] + rest*(sortedArr[base+1]-sortedArr[base]) : sortedArr[base];
+    }
+    function renderMetricSummary(metricKey, stats){
+      const box = document.getElementById('metricSummary'); if(!box) return;
+      const fmt = formatInt;
+
+      if (!stats || stats.count===0){
+        box.innerHTML = `
+          <div class="row"><span class="k">Metrik:</span><span class="v">${displayMetricName(metricKey)}</span></div>
+          <div class="row"><span class="k">Nokta sayısı:</span><span class="v">0</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">E-Com Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="row"><span class="k">Fiziki Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="row"><span class="k">Toplam Ciro / Adet:</span><span class="v">— / —</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">Min / Maks:</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Q33 / Q66:</span><span class="v">—</span></div>
+          <div class="hr"></div>
+          <div class="row"><span class="k">Küçük (≤ Q33):</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Orta (Q33–Q66):</span><span class="v">—</span></div>
+          <div class="row"><span class="k">Büyük (≥ Q66):</span><span class="v">—</span></div>
+          <div style="margin-top:6px; color:#666; font-size:11px;">Eşikler veri dağılımından otomatik hesaplanır.</div>
+        `;
+        return;
+      }
+
+      // Başlık + toplamlar
+      let topHtml = `
+        <div class="row"><span class="k">Metrik:</span><span class="v">${displayMetricName(metricKey)}</span></div>
+        <div class="row"><span class="k">Nokta sayısı:</span><span class="v">${stats.count.toLocaleString('tr-TR')}</span></div>
+        <div class="hr"></div>
+        <div class="row"><span class="k">E-Com Ciro / Adet:</span><span class="v">${fmt(stats.totalEcomCiro)} / ${fmt(stats.totalEcomAdet)}</span></div>
+        <div class="row"><span class="k">Fiziki Ciro / Adet:</span><span class="v">${fmt(stats.totalFizCiro)} / ${fmt(stats.totalFizAdet)}</span></div>
+        <div class="row"><span class="k">Toplam Ciro / Adet:</span><span class="v">${fmt(stats.totalCiro)} / ${fmt(stats.totalAdet)}</span></div>
+      `;
+
+      if (metricKey==='none'){
+        box.innerHTML = topHtml + `
+          <div class="hr"></div>
+          <div>Boyutlandırma kapalı; tüm balonlar sabit yarıçapla çizilir.</div>
+        `;
+        return;
+      }
+
+      box.innerHTML = topHtml + `
+        <div class="row"><span class="k">Min / Maks:</span><span class="v">${fmt(stats.min)} / ${fmt(stats.max)}</span></div>
+        <div class="row"><span class="k">Q33 / Q66:</span><span class="v">${fmt(stats.q33)} / ${fmt(stats.q66)}</span></div>
+        <div class="hr"></div>
+        <div class="row"><span class="k">Küçük (≤ ${fmt(stats.q33)}):</span><span class="v">${stats.smallCount.toLocaleString('tr-TR')}</span></div>
+        <div class="row"><span class="k">Orta (${fmt(stats.q33)} – ${fmt(stats.q66)}):</span><span class="v">${stats.midCount.toLocaleString('tr-TR')}</span></div>
+        <div class="row"><span class="k">Büyük (≥ ${fmt(stats.q66)}):</span><span class="v">${stats.bigCount.toLocaleString('tr-TR')}</span></div>
+        <div style="margin-top:6px; color:#666; font-size:11px;">Eşikler veri dağılımından otomatik hesaplanır.</div>
+      `;
+    }
+
+    // === Tooltip içeriklerini dinamik üreten yardımcılar ===
+    function buildProvinceTooltip(p){
+      const name = p.NAME || p.name || 'İl';
+      if (renkliIl){
+        const parti= p.SecilenParti || "Belirtilmemiş";
+        const oy   = p.SecilenOy!=null ? formatInt(p.SecilenOy) : "-";
+        const oran = formatPercent(p.SecilenPartiOyOranı);
+        return `<div style="font-size:13px"><b>${name}</b><br/>${parti}<br/><b>Oy:</b> ${oy} &nbsp; <b>Oran:</b> ${oran}</div>`;
+      }
+      return `<div style="font-size:13px"><b>${name}</b></div>`;
+    }
+    function districtName(p){
+      const keys=["NAME_2","ADM2_TR","ADM2_EN","ADM2_NAME","NAME_TR","NAME_TRK","ilce","ILCE","DISTRICT","DISTRICT_TR","NAME2","name","name:tr","NAME"];
+      for(const k of keys){
+        if (p && p[k] && String(p[k]).toLowerCase()!=='istanbul' && String(p[k]).toLowerCase()!=='i̇stanbul') return String(p[k]);
+      }
+      return "";
+    }
+    function buildDistrictTooltip(p){
+      const name = districtName(p) || 'İlçe';
+      if (renkliIlce){
+        const parti= p.SecilenParti || "Belirtilmemiş";
+        const oy   = p.SecilenOy!=null ? formatInt(p.SecilenOy) : "-";
+        const oran = formatPercent(p.SecilenPartiOyOranı);
+        return `<div style="font-size:13px"><b>${name}</b><br/>${parti}<br/><b>Oy:</b> ${oy} &nbsp; <b>Oran:</b> ${oran}</div>`;
+      }
+      return `<div style="font-size:13px"><b>${name}</b></div>`;
+    }
+
+    // === Boundaries ===
+    fetch("/get_boundaries")
+      .then(r=>r.json())
+      .then(data=>{
+        if (data.error){ alert(data.error); return; }
+
+        PARTY_COLORS = data.party_colors || {};
+        DEFAULT_COLOR = data.default_color || DEFAULT_COLOR;
+
+        ilLayer = L.geoJSON(data.il, {
+          pane:'panePolygons',
+          style:f=>({ color:"#333", weight:1, fillColor: (currentMode==='il' && renkliIl) ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }),
+          onEachFeature:(f,layer)=>{
+            layer.bindTooltip('', {direction:'top', sticky:true, opacity:0.95});
+            layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildProvinceTooltip(f.properties||{})); });
+          }
+        });
+
+        const istanbulDistrictFC = {
+          type:"FeatureCollection",
+          features:(data.ilce.features||[]).filter(ft=>{
+            const p=ft.properties||{}; const il=p["İlYeni"]||p["IlYeni"]||p["il"]||p["IL"]||p["province"]||p["ADM1_TR"]||p["ADMIN_NAME_1"]||p["PARENT_NAME"];
+            return isIstanbulName(il);
+          })
+        };
+
+        istIlceLayer = L.geoJSON(istanbulDistrictFC, {
+          pane:'paneDistricts',
+          style:f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }),
+          onEachFeature:(f,layer)=>{
+            layer.bindTooltip('', {direction:'top', sticky:true, opacity:0.95});
+            layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildDistrictTooltip(f.properties||{})); });
+          }
+        });
+
+        // Kalıcı ilçe etiketleri
+        districtLabelsLayer = L.layerGroup([], { pane:'paneLabels' });
+        (istanbulDistrictFC.features||[]).forEach(ft=>{
+          const props=ft.properties||{}; const name=districtName(props); if(!name) return;
+          const temp=L.geoJSON(ft); const center=temp.getBounds().getCenter();
+          const icon=L.divIcon({ className:'label', html:name });
+          districtLabelsLayer.addLayer(L.marker(center,{icon,interactive:false}));
+        });
+
+        ilLayer.addTo(map);
+        fitTo(ilLayer);
+        brandLayer.bringToFront();
+        showBrandLegend(selectedBrands()); // sağ üst legend
+      });
+
+    // Mode change
+    document.getElementById("modeSelect").onchange = function(){
+      currentMode = this.value;
+      if (currentMode==='il'){
+        if (istIlceLayer && map.hasLayer(istIlceLayer)) map.removeLayer(istIlceLayer);
+        if (districtLabelsLayer && map.hasLayer(districtLabelsLayer)) map.removeLayer(districtLabelsLayer);
+        if (ilLayer && !map.hasLayer(ilLayer)) ilLayer.addTo(map);
+        document.getElementById("toggleColors").innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
+        if (renkliIl) showPartyLegend(); else hidePartyLegend();
+        fitTo(ilLayer);
+      } else {
+        if (ilLayer && map.hasLayer(ilLayer)) map.removeLayer(ilLayer);
+        if (istIlceLayer && !map.hasLayer(istIlceLayer)) istIlceLayer.addTo(map);
+        if (districtLabelsLayer && !map.hasLayer(districtLabelsLayer)) districtLabelsLayer.addTo(map);
+        document.getElementById("toggleColors").innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
+        if (renkliIlce) showPartyLegend(); else hidePartyLegend();
+        fitTo(istIlceLayer);
+      }
+      brandLayer.bringToFront();
+    };
+
+    // Color toggle
+    document.getElementById("toggleColors").onclick = function(){
+      if (currentMode==='il'){
+        renkliIl = !renkliIl;
+        this.innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
+        if (ilLayer){
+          ilLayer.setStyle(f=>({ color:"#333", weight:1, fillColor: renkliIl ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }));
+        }
+        if (renkliIl) showPartyLegend(); else hidePartyLegend();
+      } else {
+        renkliIlce = !renkliIlce;
+        this.innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
+        if (istIlceLayer){
+          istIlceLayer.setStyle(f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }));
+        }
+        if (renkliIlce) showPartyLegend(); else hidePartyLegend();
+      }
+      brandLayer.bringToFront();
+    };
+
+    // === Brands ===
+    function selectedBrands(){ return Array.from(document.querySelectorAll('.brandChk:checked')).map(el=>el.value); }
+
+    function radiusFromMetric(val, min, max){
+      if (val==null || isNaN(val) || min==null || max==null || max<=min) return 7;
+      const t = (val-min)/(max-min);
+      return 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); // 5..15 (taban)
+    }
+
+    // Aynı koordinatta olanları grupla (~1-2m tolerans için 5 ondalık)
+    function groupByCoord(points){
+      const groups = new Map();
+      points.forEach(p=>{
+        const key = `${Number(p.lat).toFixed(5)},${Number(p.lon).toFixed(5)}`;
+        if(!groups.has(key)) groups.set(key, {lat:p.lat, lon:p.lon, items:[]});
+        groups.get(key).items.push(p);
+      });
+      return Array.from(groups.values());
+    }
+
+    // Donut/Pie HTML marker (conic-gradient) — iç sarmalayıcı ölçeklenir
+    function makePieIcon(items, metricKey, baseSize=22){
+      const vals = items.map(it=>{
+        let v = 1;
+        if (metricKey !== 'none' && it[metricKey]!=null && !isNaN(it[metricKey])) v = Number(it[metricKey]);
+        return Math.max(0, v);
+      });
+      const total = vals.reduce((a,b)=>a+b,0) || 1;
+      let acc = 0;
+      const segments = items.map((it, i)=>{
+        const share = vals[i]/total;
+        const start = acc * 360;
+        const end   = (acc + share) * 360;
+        acc += share;
+        return `${brandColor(it.brand)} ${start}deg ${end}deg`;
+      }).join(', ');
+
+      const size = baseSize + Math.min(12, (items.length-1)*3);
+
+      const html = `
+        <div class="pie-wrap" style="width:${size}px;height:${size}px;">
+          <div class="pie-scale">
+            <div class="pie-marker" style="
+              width:${size}px;height:${size}px;border-radius:50%;
+              background: conic-gradient(${segments});
+              border:1.5px solid #333; box-shadow:0 1px 4px rgba(0,0,0,.25); position:relative;">
+              <div style="
+                position:absolute; inset:22%;
+                border-radius:50%; background:rgba(255,255,255,.9);
+                border:1px solid rgba(0,0,0,.2);"></div>
+            </div>
+          </div>
+        </div>`;
+      return { html, size };
+    }
+
+    // Zoom ölçeği
+    const BASE_ZOOM = 8;
+    function zoomFactor(){
+      const z = map.getZoom();
+      let f = Math.pow(1.12, (z - BASE_ZOOM));
+      return Math.max(0.9, Math.min(1.8, f));
+    }
+    function applyZoomScaling(){
+      const f = zoomFactor();
+      brandLayer.eachLayer(layer=>{
+        if (layer instanceof L.CircleMarker){
+          const base = layer._baseR || 7;
+          const newR = Math.max(4, Math.min(22, base * f));
+          layer.setStyle({ radius: newR });
+        } else if (layer instanceof L.Marker && layer._isPie){
+          const el = layer.getElement && layer.getElement();
+          if (el){
+            const sc = el.querySelector('.pie-scale');
+            if (sc) sc.style.transform = `scale(${f})`;
+          }
+        }
+      });
+    }
+    map.on('zoom', applyZoomScaling);
+
+    function drawBrands(){
+      brandLayer.clearLayers();
+      const brands = selectedBrands();
+      showBrandLegend(brands);
+
+      if (!allBrandPoints || !allBrandPoints.length || !brands.length){
+        renderMetricSummary('none', { count:0 });
+        return;
+      }
+
+      const metricKey = document.getElementById('metricSelect').value;
+      // Önce sadece seçili markalar
+      let pts = allBrandPoints.filter(p=>brands.includes(p.brand));
+
+      // Eğer E-Com Ciro ile boyutlandırılıyorsa ve değer ≤ 0 ise o marka/nokta çizilmesin
+      if (metricKey === 'IL_ILCE_ECOM_CIRO'){
+        pts = pts.filter(p => {
+          const v = Number(p.IL_ILCE_ECOM_CIRO);
+          return !isNaN(v) && v > 0;
+        });
+      }
+
+      // Toplamlar
+      const sumOf = (arr, key) => arr.reduce((acc,p)=>{
+        const v = Number(p[key]); return acc + (isNaN(v) ? 0 : v);
+      }, 0);
+
+      const totalCiro     = sumOf(pts, 'IL_ILCE_CIRO');
+      const totalAdet     = sumOf(pts, 'IL_ILCE_ADET');
+      const totalEcomCiro = sumOf(pts, 'IL_ILCE_ECOM_CIRO');
+      const totalEcomAdet = sumOf(pts, 'IL_ILCE_ECOM_ADET');
+      const totalFizCiro  = sumOf(pts, 'IL_ILCE_FIZIKI_CIRO');
+      const totalFizAdet  = sumOf(pts, 'IL_ILCE_FIZIKI_ADET');
+
+      const values = (metricKey==='none') ? [] : pts.map(p=>p[metricKey]).filter(v=>v!=null && !isNaN(v)).map(Number);
+      let stats = {
+        count: pts.length,
+        totalCiro, totalAdet,
+        totalEcomCiro, totalEcomAdet,
+        totalFizCiro,  totalFizAdet
+      };
+      let min=null, max=null, q33=null, q66=null;
+      if (metricKey!=='none' && values.length){
+        values.sort((a,b)=>a-b);
+        min=values[0]; max=values[values.length-1];
+        q33=quantile(values, 1/3); q66=quantile(values, 2/3);
+        stats.min=min; stats.max=max; stats.q33=q33; stats.q66=q66;
+      }
+
+      // Aynı koordinatlar → gruplar
+      const groups = groupByCoord(pts);
+
+      let smallCount=0, midCount=0, bigCount=0;
+
+      groups.forEach(g=>{
+        // Eğer donut'ta bazı markaların E-Com Ciro'su 0 ise (o metrikteyken) onları çıkar
+        let items = g.items.slice();
+        if (metricKey === 'IL_ILCE_ECOM_CIRO'){
+          items = items.filter(it => Number(it.IL_ILCE_ECOM_CIRO) > 0);
+          if (!items.length) return; // hepsi 0 ise nokta yok
+        }
+
+        if (items.length === 1){
+          const p = items[0];
+          const color = brandColor(p.brand);
+          let r = 7;
+          let baseR = 7;
+
+          if (metricKey!=='none' && min!=null && max!=null && max>min){
+            const v = (p[metricKey]==null || isNaN(p[metricKey])) ? null : Number(p[metricKey]);
+            if (v!=null){
+              const t = (v-min)/(max-min);
+              baseR = 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); // taban yarıçap
+              if (q33!=null && q66!=null){
+                if (v <= q33) smallCount++; else if (v >= q66) bigCount++; else midCount++;
+              }
+            }
+          }
+
+          // Zoom ölçeği uygula
+          r = Math.max(4, Math.min(22, baseR * zoomFactor()));
+
+          const metricLabel = displayMetricName(metricKey);
+          const metricLine = (metricKey!=='none')
+            ? `<b>${metricLabel}:</b> ${p[metricKey]!=null ? formatInt(p[metricKey]) : 'Veri yok'}<br/>` : '';
+
+          const blockEcom = `
+            <div style="margin-top:4px">
+              <div style="color:#666">E-Com</div>
+              <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_ECOM_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ECOM_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_ECOM_TICKET_SIZE)}</div>
+            </div>`;
+
+          const blockFiz = `
+            <div style="margin-top:4px">
+              <div style="color:#666">Fiziki</div>
+              <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_FIZIKI_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_FIZIKI_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_FIZIKI_TICKET_SIZE)}</div>
+            </div>`;
+
+          const legacyBlock = `
+            <div style="margin-top:4px; color:#666">Toplam</div>
+            <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_TICKET_SIZE)}</div>
+          `;
+
+          const html = `
+            <div style="font-size:13px">
+              <b>${displayBrandName(p.brand)}</b><br/>
+              ${p.BKM_IL_ILCE_NEW || ''}<br/>
+              ${metricLine}
+              ${blockEcom}
+              ${blockFiz}
+              ${legacyBlock}
+            </div>`;
+
+          const marker = L.circleMarker([p.lat, p.lon], {
+            pane:'paneMarkers', radius:r, color:'#333', weight:1, fillColor:color, fillOpacity:0.9
+          }).bindTooltip(html, {direction:'top', sticky:true, opacity:0.95});
+
+          marker._baseR = baseR; // zoom için taban
+          brandLayer.addLayer(marker);
+          return;
+        }
+
+        // Çok markalı → donut
+        const { html, size } = makePieIcon(items, metricKey, 22);
+
+        const metricLabel = displayMetricName(metricKey);
+        const rows = items
+          .slice()
+          .sort((a,b)=>displayBrandName(a.brand).localeCompare(displayBrandName(b.brand),'tr'))
+          .map(p=>{
+            const v = (metricKey!=='none' && p[metricKey]!=null) ? formatInt(p[metricKey]) : '—';
+            return `
+              <tr>
+                <td style="padding:2px 6px;">
+                  <span style="display:inline-block;width:10px;height:10px;background:${brandColor(p.brand)};border:1px solid rgba(0,0,0,.2);margin-right:6px"></span>
+                  ${displayBrandName(p.brand)}
+                </td>
+                <td style="padding:2px 0;text-align:right;"><b>${v}</b></td>
+              </tr>`;
+          }).join('');
+
+        const locationText = (items.find(i => i.BKM_IL_ILCE_NEW) || {}).BKM_IL_ILCE_NEW || 'Konum';
+        const table = `
+          <div style="font-size:13px">
+            <b>${locationText}</b><br/>
+            <div style="margin:4px 0 2px; color:#666">${metricLabel}</div>
+            <table style="border-collapse:collapse">${rows}</table>
+            ${metricKey==='none' ? '<div style="color:#666;margin-top:4px">Dilimler eşit payda.</div>' : ''}
+          </div>`;
+
+        const marker = L.marker([g.lat, g.lon], {
+          pane:'paneMarkers',
+          icon: L.divIcon({ className:'', html, iconSize:[size,size], iconAnchor:[size/2, size/2] })
+        }).bindTooltip(table, {direction:'top', sticky:true, opacity:0.95});
+
+        marker._isPie = true; // zoom ölçeğinde iç sarmalayıcıyı büyüteceğiz
+        brandLayer.addLayer(marker);
+      });
+
+      if (metricKey!=='none' && values.length){
+        stats.smallCount=smallCount; stats.midCount=midCount; stats.bigCount=bigCount;
+        renderMetricSummary(metricKey, stats);
+      } else {
+        renderMetricSummary('none', stats);
+      }
+
+      brandLayer.bringToFront();
+      // başlangıç ölçeğini uygula
+      applyZoomScaling();
+    }
+
+    async function loadBrands(){
+      const brands = selectedBrands();
+      const qs = encodeURIComponent(brands.join(','));
+      const res = await fetch(`/get_brands?brands=${qs}`);
+      const data = await res.json();
+      if (data.error){ alert(data.error); return; }
+      allBrandPoints = data.points || [];
+      drawBrands();
+    }
+
+    // Checkbox → fetch & draw, metric → redraw
+    document.querySelectorAll('.brandChk').forEach(el=>el.addEventListener('change', ()=>{ loadBrands(); }));
+    document.getElementById('metricSelect').addEventListener('change', drawBrands);
+
+    // İlk yükleme
+    loadBrands();
+  </script>
+</body>
+</html>
