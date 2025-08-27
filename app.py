@@ -9,7 +9,7 @@ from shapely.ops import unary_union
 # <<< Excel için >>>
 import pandas as pd
 
-app = Flask(_name_)
+app = Flask(__name__)
 app.config['CACHE_TYPE'] = 'simple'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 3600
 cache = Cache(app)
@@ -54,7 +54,7 @@ def crop_to_largest_component(geojson):
                 shapely_geom = shape(geom)
                 if getattr(shapely_geom, "geoms", None):
                     largest = max(shapely_geom.geoms, key=lambda a: a.area)
-                    feature["geometry"] = largest._geo_interface_
+                    feature["geometry"] = largest.__geo_interface__
             except Exception:
                 pass
     return geojson
@@ -71,8 +71,8 @@ def keep_significant_components(geojson, min_ratio=0.003):
                 if not kept:
                     kept = [max(g.geoms, key=lambda p: p.area)]
                 ft["geometry"] = (
-                    kept[0]._geo_interface_ if len(kept) == 1
-                    else MultiPolygon(kept)._geo_interface_
+                    kept[0].__geo_interface__ if len(kept) == 1
+                    else MultiPolygon(kept).__geo_interface__
                 )
             except Exception:
                 pass
@@ -163,7 +163,7 @@ def dedupe_provinces(il_geojson):
         new_features.append({
             "type": "Feature",
             "properties": base_props,
-            "geometry": union_geom._geo_interface_ if union_geom else None
+            "geometry": union_geom.__geo_interface__ if union_geom else None
         })
     return {"type": "FeatureCollection", "features": new_features}
 
@@ -220,7 +220,7 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         if geoms:
             try:
                 union_geom = unary_union(geoms)
-                pft["geometry"] = union_geom._geo_interface_
+                pft["geometry"] = union_geom.__geo_interface__
                 updated += 1
             except Exception:
                 skipped.append(p_name)
@@ -439,6 +439,7 @@ def get_brands():
         records.append({
             "brand": str(r.get("MARKA_CANON", "")),
             "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW", "")),
+            "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW",     "")),
 
             # Toplam (opsiyonel)
             "IL_ILCE_CIRO": float(r["IL_ILCE_CIRO"]) if "IL_ILCE_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_CIRO")) else None,
@@ -462,7 +463,7 @@ def get_brands():
     return jsonify({"points": records, "brands": wanted})
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     # Render tarzı ortamlarda PORT ortam değişkeninden gelir
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
