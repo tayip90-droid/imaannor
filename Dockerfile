@@ -17,4 +17,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Gunicorn ile production servis
-CMD ["gunicorn", "-k", "gthread", "--threads", "4", "--timeout", "120", "-b", "0.0.0.0:${PORT}", "app:app"]
+CMD exec gunicorn -k gthread --threads 4 --timeout 120 -b 0.0.0.0:$PORT app:app
