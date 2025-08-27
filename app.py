@@ -5,6 +5,7 @@ import os, json, re, difflib
 from collections import defaultdict
 from shapely.geometry import shape, MultiPolygon
 from shapely.ops import unary_union
+from shapely.validation import make_valid  # Shapely 2.x
 
 # Excel
 import pandas as pd
@@ -112,7 +113,8 @@ def province_name_from_district(props):
 
 _TMAP = str.maketrans({
     "Ç":"C","Ö":"O","Ş":"S","İ":"I","I":"I","Ü":"U","Ğ":"G",
-    "ç":"c","ö":"o","ş":"s","ı":"i","i":"i","ü":"u","ğ":"g"
+    "ç":"c","ö":"o","ş":"s","ı":"i","i":"i","ü":"u","ğ":"g",
+    "â":"a","Â":"A","ê":"e","Ê":"E","î":"i","Î":"I","ô":"o","Ô":"O","û":"u","Û":"U"
 })
 def _normalize_name(s: str) -> str:
     if not s: return ""
@@ -129,6 +131,8 @@ ALIASES = {
     "k maras": "kahramanmaras",
     "kmaras": "kahramanmaras",
     "maras": "kahramanmaras",
+    "elazig": "elazig",  # normalize güvence
+    "hakkari": "hakkari",
 }
 
 def ensure_name_field(geojson, name_getter, out_key="NAME"):
@@ -165,6 +169,50 @@ def dedupe_provinces(il_geojson):
         })
     return {"type": "FeatureCollection", "features": new_features}
 
+# ---- Robust geometry ops ----
+def _to_valid(geom):
+    try:
+        g2 = make_valid(geom)
+        if g2.is_empty:
+            # fallback
+            g2 = geom.buffer(0)
+        return g2
+    except Exception:
+        try:
+            return geom.buffer(0)
+        except Exception:
+            return geom  # son çare
+
+def _safe_unary_union(geoms):
+    cleaned = []
+    dropped = 0
+    for g in geoms:
+        try:
+            vg = _to_valid(g)
+            if not vg.is_empty:
+                cleaned.append(vg)
+            else:
+                dropped += 1
+        except Exception:
+            dropped += 1
+    if not cleaned:
+        return None, dropped
+    try:
+        return unary_union(cleaned), dropped
+    except Exception:
+        # stepwise union fallback
+        from shapely.ops import unary_union as uu
+        acc = cleaned[0]
+        for g in cleaned[1:]:
+            try:
+                acc = uu([acc, g])
+            except Exception:
+                try:
+                    acc = _to_valid(acc).union(_to_valid(g))
+                except Exception:
+                    pass
+        return acc, dropped
+
 def update_province_boundaries(il_geojson, ilce_geojson):
     # Province canonical set
     canon_norm_to_orig = {}
@@ -196,40 +244,46 @@ def update_province_boundaries(il_geojson, ilce_geojson):
     print("[DEBUG] grouped district counts (by province norm):",
           {k: len(v) for k, v in grouped.items()})
 
-    updated = 0; skipped = []
+    updated = 0; skipped = []; invalid_counts = {}
     for pft in il_geojson.get("features", []):
         p_name = province_name_from_province(pft.get("properties", {}) or {})
         if not p_name:
             continue
         p_norm = _normalize_name(p_name)
         p_norm = ALIASES.get(p_norm, p_norm)
-        if p_norm not in grouped:
+        dlist = grouped.get(p_norm)
+        if not dlist:
             skipped.append(p_name); continue
 
         geoms = []
-        for dft in grouped[p_norm]:
+        for dft in dlist:
             dgeom = dft.get("geometry")
             if not dgeom: continue
-            try: geoms.append(shape(dgeom))
-            except Exception: pass
+            try:
+                geoms.append(shape(dgeom))
+            except Exception:
+                pass
         if not geoms:
             skipped.append(p_name); continue
 
         try:
-            union_geom = unary_union(geoms)
+            union_geom, dropped = _safe_unary_union(geoms)
+            invalid_counts[p_name] = dropped
+            if union_geom is None or union_geom.is_empty:
+                skipped.append(p_name); continue
 
-            # ORİJİNAL İL POLİGONUYLA CLIP → deniz taşması gider
+            # ORİJİNAL İL POLİGONUYLA CLIP
             orig = None
             try:
                 if pft.get("geometry"):
-                    orig = shape(pft["geometry"])
+                    orig = _to_valid(shape(pft["geometry"]))
             except Exception:
                 orig = None
             if orig:
                 try:
-                    union_geom = union_geom.intersection(orig.buffer(0))
+                    union_geom = _to_valid(union_geom).intersection(orig)
                 except Exception:
-                    pass
+                    union_geom = _to_valid(union_geom)
 
             # küçük parçaları at
             union_geom = _keep_significant_parts_geom(union_geom, min_ratio=0.003)
@@ -241,6 +295,8 @@ def update_province_boundaries(il_geojson, ilce_geojson):
 
     il_geojson = keep_significant_components(il_geojson, min_ratio=0.003)
     print(f"[update_province_boundaries] updated={updated}, skipped={len(skipped)}")
+    if invalid_counts:
+        print("[DEBUG] invalid district parts dropped per province:", invalid_counts)
     if skipped:
         print("[skipped provinces]", skipped)
     return il_geojson
@@ -278,7 +334,7 @@ def index():
     return render_template("map.html")
 
 @app.route("/get_boundaries")
-@cache.cached(key_prefix="get_boundaries_v11")  # cache kır
+@cache.cached(key_prefix="get_boundaries_v12")  # cache kır
 def get_boundaries():
     base = os.path.join(app.root_path, "static")
     il_path = os.path.join(base, "updated_il_geojson.json")
@@ -299,7 +355,7 @@ def get_boundaries():
     il = filter_polygons(il)
     ilce = filter_polygons(ilce)
 
-    # ÖNEMLİ: deniz seçilmesin diye budama yapmıyoruz
+    # DİKKAT: deniz taşmasını artırdığı için kapalı
     # ilce = crop_to_largest_component(ilce)
 
     il = update_province_boundaries(il, ilce)
