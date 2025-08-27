@@ -46,19 +46,6 @@ def filter_polygons(geojson):
             feats.append(ft)
     return {"type": "FeatureCollection", "features": feats}
 
-def crop_to_largest_component(geojson):
-    for feature in geojson.get("features", []):
-        geom = feature.get("geometry") or {}
-        if geom.get("type") == "MultiPolygon":
-            try:
-                shapely_geom = shape(geom)
-                if getattr(shapely_geom, "geoms", None):
-                    largest = max(shapely_geom.geoms, key=lambda a: a.area)
-                    feature["geometry"] = largest.__geo_interface__
-            except Exception:
-                pass
-    return geojson
-
 def keep_significant_components(geojson, min_ratio=0.003):
     for ft in geojson.get("features", []):
         geom = ft.get("geometry") or {}
@@ -133,96 +120,6 @@ def ensure_name_field(geojson, name_getter, out_key="NAME"):
             props[out_key] = nm
     return geojson
 
-def dedupe_provinces(il_geojson):
-    buckets = defaultdict(list)
-    for ft in il_geojson.get("features", []):
-        props = ft.get("properties", {}) or {}
-        nm = province_name_from_province(props) or ""
-        key = _normalize_name(nm)
-        buckets[key].append(ft)
-
-    new_features = []
-    for key, fts in buckets.items():
-        if len(fts) == 1:
-            new_features.append(fts[0])
-            continue
-        geoms = [shape(ft["geometry"]) for ft in fts if ft.get("geometry")]
-        union_geom = unary_union(geoms) if geoms else None
-        base_props = (fts[0].get("properties", {}) or {}).copy()
-        for ft in fts:
-            p = ft.get("properties", {}) or {}
-            if p.get("SecilenParti"):
-                base_props["SecilenParti"] = p["SecilenParti"]
-                break
-        new_features.append({
-            "type": "Feature",
-            "properties": base_props,
-            "geometry": union_geom.__geo_interface__ if union_geom else None
-        })
-    return {"type": "FeatureCollection", "features": new_features}
-
-def update_province_boundaries(il_geojson, ilce_geojson):
-    canon_norm_to_orig = {}
-    for pft in il_geojson.get("features", []):
-        p_name = province_name_from_province(pft.get("properties", {}) or {})
-        if not p_name:
-            continue
-        norm = _normalize_name(p_name)
-        norm = ALIASES.get(norm, norm)
-        canon_norm_to_orig[norm] = p_name
-    canon_keys = list(canon_norm_to_orig.keys())
-
-    grouped = {}
-    for dft in ilce_geojson.get("features", []):
-        props = dft.get("properties", {}) or {}
-        raw = province_name_from_district(props)
-        if not raw:
-            continue
-        norm = _normalize_name(raw)
-        norm = ALIASES.get(norm, norm)
-        if norm not in canon_norm_to_orig:
-            matches = difflib.get_close_matches(norm, canon_keys, n=1, cutoff=0.75)
-            if matches:
-                norm = matches[0]
-        if norm in canon_norm_to_orig:
-            grouped.setdefault(norm, []).append(dft)
-
-    updated = 0
-    skipped = []
-    for pft in il_geojson.get("features", []):
-        p_name = province_name_from_province(pft.get("properties", {}) or {})
-        if not p_name:
-            continue
-        p_norm = _normalize_name(p_name)
-        p_norm = ALIASES.get(p_norm, p_norm)
-        if p_norm not in grouped:
-            skipped.append(p_name)
-            continue
-
-        geoms = []
-        for dft in grouped[p_norm]:
-            dgeom = dft.get("geometry")
-            if not dgeom:
-                continue
-            try:
-                geoms.append(shape(dgeom))
-            except Exception:
-                pass
-
-        if geoms:
-            try:
-                union_geom = unary_union(geoms)
-                pft["geometry"] = union_geom.__geo_interface__
-                updated += 1
-            except Exception:
-                skipped.append(p_name)
-
-    il_geojson = keep_significant_components(il_geojson, min_ratio=0.003)
-    print(f"[update_province_boundaries] updated={updated}, skipped={len(skipped)}")
-    if skipped:
-        print("[skipped provinces]", skipped)
-    return il_geojson
-
 def colorize_districts(ilce_geojson):
     def _to_float(x):
         if x is None: return None
@@ -255,7 +152,7 @@ def index():
     return render_template("map.html")
 
 @app.route("/get_boundaries")
-@cache.cached(key_prefix="get_boundaries_v7")
+@cache.cached(key_prefix="get_boundaries_preprocessed_v1")
 def get_boundaries():
     base = os.path.join(app.root_path, "static")
     il_path = os.path.join(base, "updated_il_geojson.json")
@@ -264,27 +161,34 @@ def get_boundaries():
     if not os.path.exists(il_path) or not os.path.exists(ilce_path):
         return jsonify({"error": "GeoJSON dosyaları bulunamadı"}), 404
 
+    # Preprocess edilmiş dosyaları olduğu gibi oku
     il = load_geojson(il_path)
     ilce = load_geojson(ilce_path)
 
+    # Güvenlik için sadece poligonları tut
     il = filter_polygons(il)
     ilce = filter_polygons(ilce)
 
-    ilce = crop_to_largest_component(ilce)
-    il = update_province_boundaries(il, ilce)
-    il = dedupe_provinces(il)
-
+    # Eğer preprocessing sırasında NAME doldurulmadıysa garanti altına al
     il = ensure_name_field(il, province_name_from_province, out_key="NAME")
     ilce = ensure_name_field(ilce, province_name_from_district, out_key="NAME")
 
+    # İllerin renkleri (SecilenParti varsa)
     for ft in il.get("features", []):
         props = ft.setdefault("properties", {})
         parti = props.get("SecilenParti")
         color = PARTY_COLORS.get(parti, DEFAULT_COLOR)
         props["color"] = color
 
+    # İlçe renkleri (parti tahmini de yapar)
     ilce = colorize_districts(ilce)
-    return jsonify({"il": il, "ilce": ilce, "party_colors": PARTY_COLORS, "default_color": DEFAULT_COLOR})
+
+    return jsonify({
+        "il": il,
+        "ilce": ilce,
+        "party_colors": PARTY_COLORS,
+        "default_color": DEFAULT_COLOR
+    })
 
 # ---------------------------
 # Routes: MARKA noktaları (Excel → JSON)
