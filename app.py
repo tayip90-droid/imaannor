@@ -438,7 +438,7 @@ def get_brands():
     for _, r in df.iterrows():
         records.append({
             "brand": str(r.get("MARKA_CANON", "")),
-            "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW", "")),
+            "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW",     "")),
 
             # Toplam (opsiyonel)
             "IL_ILCE_CIRO": float(r["IL_ILCE_CIRO"]) if "IL_ILCE_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_CIRO")) else None,
