@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, render_template, jsonify, request
 from flask_caching import Cache
 import os, json, re, difflib
@@ -25,10 +26,11 @@ PARTY_COLORS = {
 }
 DEFAULT_COLOR = "#f8f9f9"
 
+# === Excel dosya yolu ===
 DATA_EXCEL_PATH = os.path.join(app.root_path, "static", "BKM_MARKA_CIROLAR.xlsx")
 
 # ---------------------------
-# Helpers
+# Yardımcılar (Geo)
 # ---------------------------
 
 def load_geojson(path):
@@ -84,8 +86,10 @@ def get_first(props, keys):
     return None
 
 def province_name_from_province(props):
-    keys = ["NAME","name","NAME_1","NAME_TR","Il","IL","il","il_adi",
-            "province","prov_name","ADMIN_NAME","ADM1_TR","ADM1_EN","ADMIN","name:tr"]
+    keys = [
+        "NAME","name","NAME_1","NAME_TR","Il","IL","il","il_adi",
+        "province","prov_name","ADMIN_NAME","ADM1_TR","ADM1_EN","ADMIN","name:tr"
+    ]
     return get_first(props, keys)
 
 def province_name_from_district(props):
@@ -96,8 +100,9 @@ def province_name_from_district(props):
         "Il","IL","il","il_adi",
         "ADMIN_NAME_1","PARENT_ADM","PARENT_NAME",
         "ADMIN","name:tr",
-        # Ek anahtarlar
-        "İl", "ILCE_IL","ilce_il","Ilce_Il","il_ilce",
+        # Ek (noktalı İ dahil)
+        "İl",
+        "ILCE_IL","ilce_il","Ilce_Il","il_ilce",
         "IL_ADI","IL_AD","Sehir","Şehir","SEHIR",
         "PARENT","PROVINCE","PROVINCIA"
     ]
@@ -116,8 +121,12 @@ def _normalize_name(s: str) -> str:
     return s
 
 ALIASES = {
-    "icel":"mersin","urfa":"sanliurfa","sanli urfa":"sanliurfa",
-    "k maras":"kahramanmaras","kmaras":"kahramanmaras","maras":"kahramanmaras",
+    "icel": "mersin",
+    "urfa": "sanliurfa",
+    "sanli urfa": "sanliurfa",
+    "k maras": "kahramanmaras",
+    "kmaras": "kahramanmaras",
+    "maras": "kahramanmaras",
 }
 
 def ensure_name_field(geojson, name_getter, out_key="NAME"):
@@ -148,39 +157,49 @@ def dedupe_provinces(il_geojson):
             if p.get("SecilenParti"):
                 base_props["SecilenParti"] = p["SecilenParti"]; break
         new_features.append({
-            "type":"Feature","properties":base_props,
+            "type": "Feature",
+            "properties": base_props,
             "geometry": union_geom.__geo_interface__ if union_geom else None
         })
-    return {"type":"FeatureCollection","features":new_features}
+    return {"type": "FeatureCollection", "features": new_features}
 
 def update_province_boundaries(il_geojson, ilce_geojson):
+    # Province canonical set
     canon_norm_to_orig = {}
     for pft in il_geojson.get("features", []):
         p_name = province_name_from_province(pft.get("properties", {}) or {})
-        if not p_name: continue
+        if not p_name:
+            continue
         norm = _normalize_name(p_name)
         norm = ALIASES.get(norm, norm)
         canon_norm_to_orig[norm] = p_name
     canon_keys = list(canon_norm_to_orig.keys())
 
+    # Group districts by province (from district properties)
     grouped = {}
     for dft in ilce_geojson.get("features", []):
         props = dft.get("properties", {}) or {}
         raw = province_name_from_district(props)
-        if not raw: continue
+        if not raw:
+            continue
         norm = _normalize_name(raw)
         norm = ALIASES.get(norm, norm)
         if norm not in canon_norm_to_orig:
-            import difflib
             matches = difflib.get_close_matches(norm, canon_keys, n=1, cutoff=0.75)
-            if matches: norm = matches[0]
+            if matches:
+                norm = matches[0]
         if norm in canon_norm_to_orig:
             grouped.setdefault(norm, []).append(dft)
+
+    # DEBUG: kaç district gruplandı?
+    grp_stats = {k: len(v) for k, v in grouped.items()}
+    print("[DEBUG] grouped district counts (by province norm):", grp_stats)
 
     updated = 0; skipped = []
     for pft in il_geojson.get("features", []):
         p_name = province_name_from_province(pft.get("properties", {}) or {})
-        if not p_name: continue
+        if not p_name:
+            continue
         p_norm = _normalize_name(p_name)
         p_norm = ALIASES.get(p_norm, p_norm)
         if p_norm not in grouped:
@@ -194,8 +213,10 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         if geoms:
             try:
                 union_geom = unary_union(geoms)
-                pft["geometry"] = union_geom.__geo_interface__; updated += 1
-            except Exception: skipped.append(p_name)
+                pft["geometry"] = union_geom.__geo_interface__
+                updated += 1
+            except Exception:
+                skipped.append(p_name)
 
     il_geojson = keep_significant_components(il_geojson, min_ratio=0.003)
     print(f"[update_province_boundaries] updated={updated}, skipped={len(skipped)}")
@@ -215,7 +236,7 @@ def colorize_districts(ilce_geojson):
     for ft in ilce_geojson.get("features", []):
         props = ft.setdefault("properties", {})
         parti = props.get("SecilenParti") or props.get("Secilen Parti") \
-                 or props.get("KAZANAN") or props.get("Kazanan")
+                or props.get("KAZANAN") or props.get("Kazanan")
         if not parti:
             best_party, best_val = None, None
             for p in party_keys:
@@ -228,7 +249,7 @@ def colorize_districts(ilce_geojson):
     return ilce_geojson
 
 # ---------------------------
-# Routes
+# Routes: Harita sınırları
 # ---------------------------
 
 @app.route("/")
@@ -236,19 +257,19 @@ def index():
     return render_template("map.html")
 
 @app.route("/get_boundaries")
-@cache.cached(key_prefix="get_boundaries_v9")
+@cache.cached(key_prefix="get_boundaries_v10")  # v10: cache kır
 def get_boundaries():
     base = os.path.join(app.root_path, "static")
     il_path = os.path.join(base, "updated_il_geojson.json")
     ilce_path = os.path.join(base, "updated_ilce_geojson.json")
 
     if not os.path.exists(il_path) or not os.path.exists(ilce_path):
-        return jsonify({"error":"GeoJSON dosyaları bulunamadı"}),404
+        return jsonify({"error": "GeoJSON dosyaları bulunamadı"}), 404
 
     il = load_geojson(il_path)
     ilce = load_geojson(ilce_path)
 
-    # Debug: property anahtarlarını göster
+    # Debug: property anahtar örnekleri
     sample_il = [list((f.get("properties") or {}).keys()) for f in il.get("features", [])[:3]]
     sample_ilce = [list((f.get("properties") or {}).keys()) for f in ilce.get("features", [])[:3]]
     print("[DEBUG] Province sample keys:", sample_il)
@@ -258,7 +279,7 @@ def get_boundaries():
     ilce = filter_polygons(ilce)
     ilce = crop_to_largest_component(ilce)
 
-    il = update_province_boundaries(il, ilce)
+    il = update_province_boundaries(il, ilce)  # dissolve etmeye çalış
     il = dedupe_provinces(il)
 
     il = ensure_name_field(il, province_name_from_province, out_key="NAME")
@@ -271,19 +292,144 @@ def get_boundaries():
 
     ilce = colorize_districts(ilce)
 
-    # Kaç il skip edilmiş logla
+    # Son durum: kaç il skip?
     total = len(il.get("features", []))
-    skipped = [ft.get("properties",{}).get("NAME") for ft in il.get("features",[]) if not ft.get("geometry")]
+    skipped = [ft.get("properties", {}).get("NAME") for ft in il.get("features", []) if not ft.get("geometry")]
     print(f"[DEBUG] Provinces total={total}, skipped={len(skipped)}")
     if skipped:
         print("[DEBUG] Skipped provinces list:", skipped)
 
-    return jsonify({"il":il,"ilce":ilce,"party_colors":PARTY_COLORS,"default_color":DEFAULT_COLOR})
+    return jsonify({"il": il, "ilce": ilce, "party_colors": PARTY_COLORS, "default_color": DEFAULT_COLOR})
 
 # ---------------------------
-# Brands endpoint (aynı kaldı)
+# Routes: MARKA noktaları (Excel → JSON)
 # ---------------------------
-# ... (get_brands fonksiyonu aynen sende olduğu gibi kalabilir)
+
+BRANDS_DEFAULT = ["IMANNOOR", "VAKKO", "AKER", "ARMİNE"]
+_BRANDS_DF_CACHE = {"mtime": None, "df": None}
+
+def _pick_col(df, candidates):
+    for c in candidates:
+        if c in df.columns: return c
+    return None
+
+def _normalize_tr(s: str) -> str:
+    if s is None: return ""
+    s = str(s).strip().lower()
+    s = s.replace("ı","i").replace("İ","i")
+    return s
+
+def _canon_brand(s: str) -> str:
+    m = {
+        "imannoor":"IMANNOOR","imannor":"IMANNOOR",
+        "vakko":"VAKKO",
+        "aker":"AKER",
+        "armine":"ARMİNE","armıne":"ARMİNE"
+    }
+    key = _normalize_tr(s)
+    return m.get(key, s.upper())
+
+def _load_brands_df():
+    if not os.path.exists(DATA_EXCEL_PATH):
+        raise FileNotFoundError(f"Excel bulunamadı: {DATA_EXCEL_PATH}")
+    mtime = os.path.getmtime(DATA_EXCEL_PATH)
+    if _BRANDS_DF_CACHE["df"] is not None and _BRANDS_DF_CACHE["mtime"] == mtime:
+        return _BRANDS_DF_CACHE["df"]
+    df = pd.read_excel(DATA_EXCEL_PATH)  # sheet_name gerekirse
+    _BRANDS_DF_CACHE["df"] = df
+    _BRANDS_DF_CACHE["mtime"] = mtime
+    return df
+
+@app.route("/get_brands")
+@cache.cached(timeout=1800, query_string=True)
+def get_brands():
+    brands_param = request.args.get("brands", "")
+    if brands_param.strip():
+        wanted = [x.strip() for x in brands_param.split(",") if x.strip()]
+    else:
+        wanted = BRANDS_DEFAULT
+
+    try:
+        src = _load_brands_df().copy()
+    except Exception as e:
+        print("[DEBUG] Excel okuma hatası:", e)
+        return jsonify({"error": f"Excel okuma hatası: {e}"}), 500
+
+    # Kolon tahminleri
+    brand_col = _pick_col(src, ["MARKA","FIRMA","BKM_MARKA","BRAND","Firma","firma"])
+    city_col  = _pick_col(src, ["BKM_IL_ILCE_NEW","BKM_IL_ILCE","IL_ILCE","ILCE_IL","ILCE","İL_İLÇE","ILCE-IL"])
+
+    ciro_col_total  = _pick_col(src, ["IL_ILCE_CIRO","CIRO","CİRO","Ciro"])
+    adet_col_total  = _pick_col(src, ["IL_ILCE_ADET","ADET","Adet"])
+    tsize_col_total = _pick_col(src, ["IL_ILCE_TICKET_SIZE","TICKET_SIZE","Ticket_Size","TicketSize"])
+
+    ecom_ciro_col   = _pick_col(src, ["IL_ILCE_ECOM_CIRO","ECOM_CIRO","E-COM_CIRO","ECOM Ciro"])
+    ecom_adet_col   = _pick_col(src, ["IL_ILCE_ECOM_ADET","ECOM_ADET","E-COM_ADET","ECOM Adet"])
+    ecom_tsize_col  = _pick_col(src, ["IL_ILCE_ECOM_TICKET_SIZE","ECOM_TICKET_SIZE","E-COM_TICKET_SIZE","ECOM Ticket Size"])
+
+    fiz_ciro_col    = _pick_col(src, ["IL_ILCE_FIZIKI_CIRO","FIZIKI_CIRO","FİZİKİ_CİRO","Fiziki Ciro"])
+    fiz_adet_col    = _pick_col(src, ["IL_ILCE_FIZIKI_ADET","FIZIKI_ADET","FİZİKİ_ADET","Fiziki Adet"])
+    fiz_tsize_col   = _pick_col(src, ["IL_ILCE_FIZIKI_TICKET_SIZE","FIZIKI_TICKET_SIZE","FİZİKİ_TICKET_SIZE","Fiziki Ticket Size"])
+
+    x_col = _pick_col(src, ["X","Lon","LON","Longitude","LONGITUDE","X_KOORDINAT"])
+    y_col = _pick_col(src, ["Y","Lat","LAT","Latitude","LATITUDE","Y_KOORDINAT"])
+
+    if not brand_col or not city_col or not x_col or not y_col:
+        print("[DEBUG] Excel kolonları eksik:", list(src.columns))
+        return jsonify({"error": f"Excel kolonları eksik. Bulunanlar: {list(src.columns)}"}), 400
+
+    rename_map = { brand_col:"MARKA", city_col:"BKM_IL_ILCE_NEW", x_col:"X", y_col:"Y" }
+    if ciro_col_total:  rename_map[ciro_col_total]  = "IL_ILCE_CIRO"
+    if adet_col_total:  rename_map[adet_col_total]  = "IL_ILCE_ADET"
+    if tsize_col_total: rename_map[tsize_col_total] = "IL_ILCE_TICKET_SIZE"
+    if ecom_ciro_col:   rename_map[ecom_ciro_col]   = "IL_ILCE_ECOM_CIRO"
+    if ecom_adet_col:   rename_map[ecom_adet_col]   = "IL_ILCE_ECOM_ADET"
+    if ecom_tsize_col:  rename_map[ecom_tsize_col]  = "IL_ILCE_ECOM_TICKET_SIZE"
+    if fiz_ciro_col:    rename_map[fiz_ciro_col]    = "IL_ILCE_FIZIKI_CIRO"
+    if fiz_adet_col:    rename_map[fiz_adet_col]    = "IL_ILCE_FIZIKI_ADET"
+    if fiz_tsize_col:   rename_map[fiz_tsize_col]   = "IL_ILCE_FIZIKI_TICKET_SIZE"
+
+    df = src.rename(columns=rename_map)
+
+    df["MARKA_CANON"] = df["MARKA"].apply(_canon_brand)
+
+    for col in [
+        "X","Y",
+        "IL_ILCE_CIRO","IL_ILCE_ADET","IL_ILCE_TICKET_SIZE",
+        "IL_ILCE_ECOM_CIRO","IL_ILCE_ECOM_ADET","IL_ILCE_ECOM_TICKET_SIZE",
+        "IL_ILCE_FIZIKI_CIRO","IL_ILCE_FIZIKI_ADET","IL_ILCE_FIZIKI_TICKET_SIZE"
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=["X","Y"])
+    df = df[(df["X"].between(-180, 180)) & (df["Y"].between(-90, 90))]
+
+    df = df[df["MARKA_CANON"].isin(wanted)].copy()
+
+    records = []
+    for _, r in df.iterrows():
+        records.append({
+            "brand": str(r.get("MARKA_CANON", "")),
+            "BKM_IL_ILCE_NEW": str(r.get("BKM_IL_ILCE_NEW", "")),
+            "IL_ILCE_CIRO": float(r["IL_ILCE_CIRO"]) if "IL_ILCE_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_CIRO")) else None,
+            "IL_ILCE_ADET": float(r["IL_ILCE_ADET"]) if "IL_ILCE_ADET" in df.columns and pd.notna(r.get("IL_ILCE_ADET")) else None,
+            "IL_ILCE_TICKET_SIZE": float(r["IL_ILCE_TICKET_SIZE"]) if "IL_ILCE_TICKET_SIZE" in df.columns and pd.notna(r.get("IL_ILCE_TICKET_SIZE")) else None,
+            "IL_ILCE_ECOM_CIRO": float(r["IL_ILCE_ECOM_CIRO"]) if "IL_ILCE_ECOM_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_ECOM_CIRO")) else None,
+            "IL_ILCE_ECOM_ADET": float(r["IL_ILCE_ECOM_ADET"]) if "IL_ILCE_ECOM_ADET" in df.columns and pd.notna(r.get("IL_ILCE_ECOM_ADET")) else None,
+            "IL_ILCE_ECOM_TICKET_SIZE": float(r["IL_ILCE_ECOM_TICKET_SIZE"]) if "IL_ILCE_ECOM_TICKET_SIZE" in df.columns and pd.notna(r.get("IL_ILCE_ECOM_TICKET_SIZE")) else None,
+            "IL_ILCE_FIZIKI_CIRO": float(r["IL_ILCE_FIZIKI_CIRO"]) if "IL_ILCE_FIZIKI_CIRO" in df.columns and pd.notna(r.get("IL_ILCE_FIZIKI_CIRO")) else None,
+            "IL_ILCE_FIZIKI_ADET": float(r["IL_ILCE_FIZIKI_ADET"]) if "IL_ILCE_FIZIKI_ADET" in df.columns and pd.notna(r.get("IL_ILCE_FIZIKI_ADET")) else None,
+            "IL_ILCE_FIZIKI_TICKET_SIZE": float(r["IL_ILCE_FIZIKI_TICKET_SIZE"]) if "IL_ILCE_FIZIKI_TICKET_SIZE" in df.columns and pd.notna(r.get("IL_ILCE_FIZIKI_TICKET_SIZE")) else None,
+            "lon": float(r["X"]),
+            "lat": float(r["Y"]),
+        })
+
+    return jsonify({"points": records, "brands": wanted})
+
+# ---------------------------
+# Run
+# ---------------------------
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
