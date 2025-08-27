@@ -94,13 +94,19 @@ def province_name_from_province(props):
     return get_first(props, keys)
 
 def province_name_from_district(props):
+    # İl adının gelebileceği muhtemel anahtarları geniş tuttuk
     keys = [
         "İlYeni", "IlYeni", "ilYeni", "il_yeni",
         "ADM1_TR","ADM1_EN","ADM1_NAME","NAME_1",
         "province","prov_name",
         "Il","IL","il","il_adi",
         "ADMIN_NAME_1","PARENT_ADM","PARENT_NAME",
-        "ADMIN","name:tr"
+        "ADMIN","name:tr",
+        # ek anahtarlar (Türkiye veri setlerinde sık görülür)
+        "İl",                  # NOKTALI BÜYÜK İ
+        "ILCE_IL","ilce_il","Ilce_Il","il_ilce",
+        "IL_ADI","IL_AD","Sehir","Şehir","SEHIR",
+        "PARENT","PROVINCE","PROVINCIA"
     ]
     return get_first(props, keys)
 
@@ -162,6 +168,7 @@ def dedupe_provinces(il_geojson):
     return {"type": "FeatureCollection", "features": new_features}
 
 def update_province_boundaries(il_geojson, ilce_geojson):
+    # İl isimlerini normalize ederek kanonik liste oluştur
     canon_norm_to_orig = {}
     for pft in il_geojson.get("features", []):
         p_name = province_name_from_province(pft.get("properties", {}) or {})
@@ -172,6 +179,7 @@ def update_province_boundaries(il_geojson, ilce_geojson):
         canon_norm_to_orig[norm] = p_name
     canon_keys = list(canon_norm_to_orig.keys())
 
+    # İlçeleri il adına göre gruplandır
     grouped = {}
     for dft in ilce_geojson.get("features", []):
         props = dft.get("properties", {}) or {}
@@ -255,7 +263,7 @@ def index():
     return render_template("map.html")
 
 @app.route("/get_boundaries")
-@cache.cached(key_prefix="get_boundaries_v7")
+@cache.cached(key_prefix="get_boundaries_v8")  # cache anahtarını artırdık
 def get_boundaries():
     base = os.path.join(app.root_path, "static")
     il_path = os.path.join(base, "updated_il_geojson.json")
@@ -271,6 +279,7 @@ def get_boundaries():
     ilce = filter_polygons(ilce)
 
     ilce = crop_to_largest_component(ilce)
+    # Eğer dissolve'ı kapatmak istersen aşağıdaki satırı yorumla
     il = update_province_boundaries(il, ilce)
     il = dedupe_provinces(il)
 
@@ -454,6 +463,6 @@ def get_brands():
 
 
 if __name__ == "__main__":
-    import os
+    # Render tarzı ortamlarda PORT ortam değişkeninden gelir
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
