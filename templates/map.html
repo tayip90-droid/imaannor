@@ -14,7 +14,8 @@
     }
     html, body { height:100%; margin:0; background:var(--bg); font-family:'Inter',system-ui; color:var(--text); }
     #map { position:absolute; inset:0; }
-    /* Tooltip her şeyin üstünde olsun */
+
+    /* Tooltip her şeyin üstünde olsun (paneTop sayesinde yeterli, yine de garanti) */
     .leaflet-tooltip { z-index: 10000; }
 
     .control-panel{ position:absolute; top:16px; left:16px; width:var(--panel-w); background:var(--card);
@@ -139,7 +140,12 @@
     map.createPane('panePolygons');   map.getPane('panePolygons').style.zIndex = 400;
     map.createPane('paneDistricts');  map.getPane('paneDistricts').style.zIndex = 410;
     map.createPane('paneLabels');     map.getPane('paneLabels').style.zIndex = 600;
-    map.createPane('paneMarkers');    map.getPane('paneMarkers').style.zIndex = 650;
+
+    // Marker pane, tooltip'ten daha aşağıda
+    map.createPane('paneMarkers');    map.getPane('paneMarkers').style.zIndex = 620;
+
+    // Tooltipler için en üst pane
+    map.createPane('paneTop');        map.getPane('paneTop').style.zIndex = 1000;
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
@@ -157,10 +163,10 @@
     let allBrandPoints = [];
 
     const BRAND_COLORS = {
-      "IMANNOOR": "#9F854C", "Imannoor": "#9F854C",      // altın
-      "VAKKO": "#5B3A82", "Vakko": "#5B3A82",           // mor
-      "AKER": "#A86F2C",   "Aker": "#A86F2C",           // bakır (pembe değil)
-      "ARMİNE": "#0E7C86", "ARMINE": "#0E7C86", "Armine": "#0E7C86"  // teal
+      "IMANNOOR": "#9F854C", "Imannoor": "#9F854C",
+      "VAKKO": "#5B3A82", "Vakko": "#5B3A82",
+      "AKER": "#A86F2C",   "Aker": "#A86F2C",
+      "ARMİNE": "#0E7C86", "ARMINE": "#0E7C86", "Armine": "#0E7C86"
     };
 
     function displayBrandName(b){
@@ -169,7 +175,6 @@
     }
     function brandColor(b){ return BRAND_COLORS[b] || BRAND_COLORS[displayBrandName(b)] || '#000'; }
 
-    // === Helpers ===
     function fitTo(layer){ try{ map.fitBounds(layer.getBounds(), { padding:[10,10] }); }catch(e){} }
     function isIstanbulName(v){
       if(!v) return false;
@@ -178,7 +183,6 @@
     }
     function formatInt(x){
       if (x==null || isNaN(x)) return "-";
-      // tam sayıya çevirerek (virgül sonrası atılır)
       return Math.floor(Number(x)).toLocaleString('tr-TR');
     }
     function formatPercent(x){
@@ -277,7 +281,6 @@
         return;
       }
 
-      // Başlık + toplamlar
       let topHtml = `
         <div class="row"><span class="k">Metrik:</span><span class="v">${displayMetricName(metricKey)}</span></div>
         <div class="row"><span class="k">Nokta sayısı:</span><span class="v">${stats.count.toLocaleString('tr-TR')}</span></div>
@@ -348,7 +351,7 @@
           pane:'panePolygons',
           style:f=>({ color:"#333", weight:1, fillColor: (currentMode==='il' && renkliIl) ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }),
           onEachFeature:(f,layer)=>{
-            layer.bindTooltip('', {direction:'top', sticky:true, opacity:0.95});
+            layer.bindTooltip('', { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
             layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildProvinceTooltip(f.properties||{})); });
           }
         });
@@ -365,7 +368,7 @@
           pane:'paneDistricts',
           style:f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }),
           onEachFeature:(f,layer)=>{
-            layer.bindTooltip('', {direction:'top', sticky:true, opacity:0.95});
+            layer.bindTooltip('', { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
             layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildDistrictTooltip(f.properties||{})); });
           }
         });
@@ -382,7 +385,7 @@
         ilLayer.addTo(map);
         fitTo(ilLayer);
         brandLayer.bringToFront();
-        showBrandLegend(selectedBrands()); // sağ üst legend
+        showBrandLegend(selectedBrands());
       });
 
     // Mode change
@@ -410,17 +413,17 @@
     document.getElementById("toggleColors").onclick = function(){
       if (currentMode==='il'){
         renkliIl = !renkliIl;
-        this.innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
         if (ilLayer){
           ilLayer.setStyle(f=>({ color:"#333", weight:1, fillColor: renkliIl ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }));
         }
+        this.innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
         if (renkliIl) showPartyLegend(); else hidePartyLegend();
       } else {
         renkliIlce = !renkliIlce;
-        this.innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
         if (istIlceLayer){
           istIlceLayer.setStyle(f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }));
         }
+        this.innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
         if (renkliIlce) showPartyLegend(); else hidePartyLegend();
       }
       brandLayer.bringToFront();
@@ -435,7 +438,6 @@
       return 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); // 5..15 (taban)
     }
 
-    // Aynı koordinatta olanları grupla (~1-2m tolerans için 5 ondalık)
     function groupByCoord(points){
       const groups = new Map();
       points.forEach(p=>{
@@ -446,7 +448,6 @@
       return Array.from(groups.values());
     }
 
-    // Donut/Pie HTML marker (conic-gradient) — iç sarmalayıcı ölçeklenir
     function makePieIcon(items, metricKey, baseSize=22){
       const vals = items.map(it=>{
         let v = 1;
@@ -482,7 +483,6 @@
       return { html, size };
     }
 
-    // Zoom ölçeği
     const BASE_ZOOM = 8;
     function zoomFactor(){
       const z = map.getZoom();
@@ -518,10 +518,7 @@
       }
 
       const metricKey = document.getElementById('metricSelect').value;
-      // Önce sadece seçili markalar
       let pts = allBrandPoints.filter(p=>brands.includes(p.brand));
-
-      // Eğer E-Com Ciro ile boyutlandırılıyorsa ve değer ≤ 0 ise o marka/nokta çizilmesin
       if (metricKey === 'IL_ILCE_ECOM_CIRO'){
         pts = pts.filter(p => {
           const v = Number(p.IL_ILCE_ECOM_CIRO);
@@ -529,7 +526,6 @@
         });
       }
 
-      // Toplamlar
       const sumOf = (arr, key) => arr.reduce((acc,p)=>{
         const v = Number(p[key]); return acc + (isNaN(v) ? 0 : v);
       }, 0);
@@ -556,17 +552,19 @@
         stats.min=min; stats.max=max; stats.q33=q33; stats.q66=q66;
       }
 
-      // Aynı koordinatlar → gruplar
       const groups = groupByCoord(pts);
 
       let smallCount=0, midCount=0, bigCount=0;
+      const bumpBucket = (v) => {
+        if (metricKey==='none' || v==null || isNaN(v) || q33==null || q66==null) return;
+        if (v <= q33) smallCount++; else if (v >= q66) bigCount++; else midCount++;
+      };
 
       groups.forEach(g=>{
-        // Eğer donut'ta bazı markaların E-Com Ciro'su 0 ise (o metrikteyken) onları çıkar
         let items = g.items.slice();
         if (metricKey === 'IL_ILCE_ECOM_CIRO'){
           items = items.filter(it => Number(it.IL_ILCE_ECOM_CIRO) > 0);
-          if (!items.length) return; // hepsi 0 ise nokta yok
+          if (!items.length) return;
         }
 
         if (items.length === 1){
@@ -579,14 +577,11 @@
             const v = (p[metricKey]==null || isNaN(p[metricKey])) ? null : Number(p[metricKey]);
             if (v!=null){
               const t = (v-min)/(max-min);
-              baseR = 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); // taban yarıçap
-              if (q33!=null && q66!=null){
-                if (v <= q33) smallCount++; else if (v >= q66) bigCount++; else midCount++;
-              }
+              baseR = 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t)));
+              bumpBucket(v);
             }
           }
 
-          // Zoom ölçeği uygula
           r = Math.max(4, Math.min(22, baseR * zoomFactor()));
 
           const metricLabel = displayMetricName(metricKey);
@@ -622,9 +617,9 @@
 
           const marker = L.circleMarker([p.lat, p.lon], {
             pane:'paneMarkers', radius:r, color:'#333', weight:1, fillColor:color, fillOpacity:0.9
-          }).bindTooltip(html, {direction:'top', sticky:true, opacity:0.95});
+          }).bindTooltip(html, { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
 
-          marker._baseR = baseR; // zoom için taban
+          marker._baseR = baseR;
           brandLayer.addLayer(marker);
           return;
         }
@@ -637,6 +632,7 @@
           .slice()
           .sort((a,b)=>displayBrandName(a.brand).localeCompare(displayBrandName(b.brand),'tr'))
           .map(p=>{
+            if (metricKey!=='none') bumpBucket(Number(p[metricKey]));
             const v = (metricKey!=='none' && p[metricKey]!=null) ? formatInt(p[metricKey]) : '—';
             return `
               <tr>
@@ -660,9 +656,9 @@
         const marker = L.marker([g.lat, g.lon], {
           pane:'paneMarkers',
           icon: L.divIcon({ className:'', html, iconSize:[size,size], iconAnchor:[size/2, size/2] })
-        }).bindTooltip(table, {direction:'top', sticky:true, opacity:0.95});
+        }).bindTooltip(table, { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
 
-        marker._isPie = true; // zoom ölçeğinde iç sarmalayıcıyı büyüteceğiz
+        marker._isPie = true;
         brandLayer.addLayer(marker);
       });
 
@@ -674,7 +670,6 @@
       }
 
       brandLayer.bringToFront();
-      // başlangıç ölçeğini uygula
       applyZoomScaling();
     }
 
@@ -688,7 +683,6 @@
       drawBrands();
     }
 
-    // Checkbox → fetch & draw, metric → redraw
     document.querySelectorAll('.brandChk').forEach(el=>el.addEventListener('change', ()=>{ loadBrands(); }));
     document.getElementById('metricSelect').addEventListener('change', drawBrands);
 
