@@ -8,14 +8,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root{
-      --panel-w: 320px; --bg:#f6f7f9; --card:#fff; --text:#111827; --muted:#6b7280;
+      --panel-w: 340px; --bg:#f6f7f9; --card:#fff; --text:#111827; --muted:#6b7280;
       --border:#e5e7eb; --ring:#93c5fd; --shadow:0 8px 24px rgba(0,0,0,.08);
       --radius:14px; --radius-sm:10px;
     }
     html, body { height:100%; margin:0; background:var(--bg); font-family:'Inter',system-ui; color:var(--text); }
     #map { position:absolute; inset:0; }
-
-    /* Tooltip her şeyin üstünde olsun (paneTop sayesinde yeterli, yine de garanti) */
     .leaflet-tooltip { z-index: 10000; }
 
     .control-panel{ position:absolute; top:16px; left:16px; width:var(--panel-w); background:var(--card);
@@ -41,13 +39,7 @@
     .metric-summary .row{ display:flex; justify-content:space-between; gap:10px; margin:2px 0; }
     .metric-summary .row .k{ color:var(--muted); } .metric-summary .row .v{ font-weight:700; }
     .label { font-size:10px; font-weight:700; color:#111; text-shadow: none; white-space:nowrap; pointer-events:none; }
-
-    /* Donut iç ölçekleyici */
-    .pie-scale{
-      transform-origin: center center;
-      will-change: transform;
-      transition: transform .12s ease;
-    }
+    .pie-scale{ transform-origin:center; will-change:transform; transition:transform .12s ease; }
   </style>
 </head>
 <body>
@@ -72,8 +64,16 @@
           <option value="il" selected>İl bazlı çiz</option>
           <option value="ilce">İlçe bazlı çiz (İstanbul)</option>
         </select>
+
+        <div class="hr"></div>
+        <label style="font-size:12px; color:#6b7280;">Renk Modu</label>
+        <select id="colorMode" style="margin-top:6px;">
+          <option value="parti" selected>Oy dağılımı (Parti)</option>
+          <option value="ses">Ortalama SES Skoru</option>
+        </select>
+
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
-          <button id="toggleColors" class="btn-ghost">Oy dağılımını göster</button>
+          <button id="toggleColors" class="btn-ghost">Renkleri kapat</button>
         </div>
       </div>
 
@@ -140,35 +140,35 @@
     map.createPane('panePolygons');   map.getPane('panePolygons').style.zIndex = 400;
     map.createPane('paneDistricts');  map.getPane('paneDistricts').style.zIndex = 410;
     map.createPane('paneLabels');     map.getPane('paneLabels').style.zIndex = 600;
-
-    // Marker pane, tooltip'ten daha aşağıda
-    map.createPane('paneMarkers');    map.getPane('paneMarkers').style.zIndex = 620;
-
-    // Tooltipler için en üst pane
-    map.createPane('paneTop');        map.getPane('paneTop').style.zIndex = 1000;
+    map.createPane('paneMarkers');    map.getPane('paneMarkers').style.zIndex = 620; // markerlar
+    map.createPane('paneTop');        map.getPane('paneTop').style.zIndex = 1000; // tooltips
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
     }).addTo(map);
 
     let ilLayer, istIlceLayer, districtLabelsLayer;
-    let partyLegendControl = null;   // bottomright
-    let brandLegendControl = null;   // topright
+    let legendControl = null;   // tek legend
+    let brandLegendControl = null;
 
-    let renkliIl = false, renkliIlce = false, currentMode = 'il';
+    let renkAcil = true; // renk açık/kapalı toggle
+    let currentMode = 'il';
     let PARTY_COLORS = {}, DEFAULT_COLOR = '#bdc3c7';
+
+
+    // SES skoru renkleri
+    const SES_GOOD = '#2e7d32'; // 133 ve üstü
+    const SES_BAD  = '#c62828';
 
     // Brand layer & colors
     let brandLayer = L.layerGroup([], { pane: 'paneMarkers' }).addTo(map);
     let allBrandPoints = [];
-
     const BRAND_COLORS = {
       "IMANNOOR": "#9F854C", "Imannoor": "#9F854C",
       "VAKKO": "#5B3A82", "Vakko": "#5B3A82",
       "AKER": "#A86F2C",   "Aker": "#A86F2C",
       "ARMİNE": "#0E7C86", "ARMINE": "#0E7C86", "Armine": "#0E7C86"
     };
-
     function displayBrandName(b){
       const mapNames = { "IMANNOOR":"Imannoor", "VAKKO":"Vakko", "AKER":"Aker", "ARMİNE":"Armine", "ARMINE":"Armine" };
       return mapNames[b] || b;
@@ -181,14 +181,11 @@
       const s = String(v).toLowerCase().replace('i̇','i').replace(/\(.*?\)/g,'').trim();
       return s.includes('istanbul');
     }
-    function formatInt(x){
-      if (x==null || isNaN(x)) return "-";
-      return Math.floor(Number(x)).toLocaleString('tr-TR');
-    }
+    function formatInt(x){ if (x==null || isNaN(x)) return "-"; return Math.floor(Number(x)).toLocaleString('tr-TR'); }
     function formatPercent(x){
       if (x==null || isNaN(x)) return "-";
       let v = Number(x);
-      if (v <= 1) v *= 100;
+      if (v<=1) v*=100;
       return "%" + Math.round(v).toLocaleString('tr-TR');
     }
     function displayMetricName(k){
@@ -207,28 +204,100 @@
       return mapn[k] || k || '—';
     }
 
-    // Legends
-    function showPartyLegend(){
-      if (!PARTY_COLORS) return;
-      if (partyLegendControl) { map.removeControl(partyLegendControl); partyLegendControl=null; }
-      partyLegendControl = L.control({ position:'bottomright' });
-      partyLegendControl.onAdd = function(){
+    
+    function readSes(props){
+      let v = props["Ortalama SES Skoru"]; if (v==null) v = props["SES_Skoru"];
+      v = Number(v); return isNaN(v) ? null : v;
+    }
+    function formatSesInt(s){
+      const n = Number(s);
+      return Number.isFinite(n) ? String(Math.round(n)) : '—';
+    }
+    function sesEtiketi(s){
+      const n = Number(s);
+      if (!Number.isFinite(n)) return '';
+      return n >= 133 ? '(yüksek)' : '(düşük)';
+    }
+
+
+    function colorByMode(props){
+      if (!renkAcil) return DEFAULT_COLOR;
+
+      const mode = document.getElementById('colorMode').value;
+      if (mode === 'parti'){
+        const parti = (props?.SecilenParti) || null;
+        return PARTY_COLORS[parti] || DEFAULT_COLOR;
+      }
+      if (mode === 'ust'){
+        const u = readUstSeviye(props);
+        if (u==null) return DEFAULT_COLOR;
+        const pct = u*100;
+        // sınıf seç
+        if (pct < 0.3) return UST_COLORS[0];
+        if (pct <= 0.5) return UST_COLORS[1];
+        if (pct <= 1.5) return UST_COLORS[2];
+        if (pct <= 4.9) return UST_COLORS[3];
+        return UST_COLORS[4]; // >= 5.0
+      }
+      if (mode === 'ses'){
+        const s = readSes(props);
+        if (s==null) return DEFAULT_COLOR;
+        return (s >= 133) ? SES_GOOD : SES_BAD;
+      }
+      return DEFAULT_COLOR;
+    }
+
+    // === Legend ===
+    function clearLegend(ctrl){ if (ctrl){ map.removeControl(ctrl); } return null; }
+
+    function showLegend(){
+      legendControl = clearLegend(legendControl);
+      const mode = document.getElementById('colorMode').value;
+
+      legendControl = L.control({ position:'bottomright' });
+      legendControl.onAdd = function(){
         const div = L.DomUtil.create('div','legend');
-        const entries = Object.entries(PARTY_COLORS).sort((a,b)=>a[0].localeCompare(b[0],'tr'));
-        div.innerHTML = '<div class="title">Parti Renkleri</div>';
-        for (const [party, color] of entries){
-          const row = document.createElement('div'); row.className='item';
-          row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${party}</span>`;
-          div.appendChild(row);
+        if (mode === 'parti'){
+          div.innerHTML = '<div class="title">Parti Renkleri</div>';
+          const entries = Object.entries(PARTY_COLORS).sort((a,b)=>a[0].localeCompare(b[0],'tr'));
+          entries.forEach(([party,color])=>{
+            const row = document.createElement('div'); row.className='item';
+            row.innerHTML = `<span class="swatch" style="background:${color}"></span><span>${party}</span>`;
+            div.appendChild(row);
+          });
+          const def = document.createElement('div'); def.className='item';
+          def.innerHTML = `<span class="swatch" style="background:${DEFAULT_COLOR}"></span><span>Veri yok / Belirsiz</span>`;
+          div.appendChild(def);
+          return div;
         }
-        const def = document.createElement('div'); def.className='item';
-        def.innerHTML = `<span class="swatch" style="background:${DEFAULT_COLOR}"></span><span>Veri yok / Belirsiz</span>`;
-        div.appendChild(def);
+
+        if (mode === 'ust'){
+          div.innerHTML = '<div class="title">En üst [A+] ve üst [A] SES grubu (%)</div>';
+          const labels = ['0 – 0,3','0,4 – 0,5','0,6 – 1,5','1,6 – 4,9','≥ 5,0'];
+          UST_COLORS.forEach((c,i)=>{
+            const row = document.createElement('div'); row.className='item';
+            row.innerHTML = `<span class="swatch" style="background:${c}"></span><span>${labels[i]}</span>`;
+            div.appendChild(row);
+          });
+          return div;
+        }
+
+        // ses
+        div.innerHTML = '<div class="title">Ortalama SES Skoru</div>';
+        const items = [
+          [SES_GOOD, 'İyi (≥ 133)'],
+          [SES_BAD,  'Kötü (< 133)'],
+          [DEFAULT_COLOR, 'Veri yok / Belirsiz']
+        ];
+        items.forEach(([c,lab])=>{
+          const row = document.createElement('div'); row.className='item';
+          row.innerHTML = `<span class="swatch" style="background:${c}"></span><span>${lab}</span>`;
+          div.appendChild(row);
+        });
         return div;
       };
-      partyLegendControl.addTo(map);
+      legendControl.addTo(map);
     }
-    function hidePartyLegend(){ if (partyLegendControl){ map.removeControl(partyLegendControl); partyLegendControl=null; } }
 
     function showBrandLegend(selectedBrands){
       if (brandLegendControl){ map.removeControl(brandLegendControl); brandLegendControl=null; }
@@ -251,7 +320,7 @@
       brandLegendControl.addTo(map);
     }
 
-    // Quantile & summary
+    // Quantile & summary (değişmedi)
     function quantile(sortedArr, q){
       const n = sortedArr.length; if(!n) return null;
       const pos = (n-1)*q, base=Math.floor(pos), rest=pos-base;
@@ -291,10 +360,7 @@
       `;
 
       if (metricKey==='none'){
-        box.innerHTML = topHtml + `
-          <div class="hr"></div>
-          <div>Boyutlandırma kapalı; tüm balonlar sabit yarıçapla çizilir.</div>
-        `;
+        box.innerHTML = topHtml + `<div class="hr"></div><div>Boyutlandırma kapalı; tüm balonlar sabit yarıçapla çizilir.</div>`;
         return;
       }
 
@@ -309,16 +375,19 @@
       `;
     }
 
-    // === Tooltip içeriklerini dinamik üreten yardımcılar ===
+    // === Tooltip içerikleri ===
     function buildProvinceTooltip(p){
       const name = p.NAME || p.name || 'İl';
-      if (renkliIl){
+      const mode = document.getElementById('colorMode').value;
+      if (mode==='parti'){
         const parti= p.SecilenParti || "Belirtilmemiş";
         const oy   = p.SecilenOy!=null ? formatInt(p.SecilenOy) : "-";
         const oran = formatPercent(p.SecilenPartiOyOranı);
         return `<div style="font-size:13px"><b>${name}</b><br/>${parti}<br/><b>Oy:</b> ${oy} &nbsp; <b>Oran:</b> ${oran}</div>`;
       }
-      return `<div style="font-size:13px"><b>${name}</b></div>`;
+      const s = readSes(p);
+      return `<div style="font-size:13px"><b>${name}</b><br/><b>Ortalama SES Skoru:</b> ${formatSesInt(s)} ${sesEtiketi(s)}</div>`;
+
     }
     function districtName(p){
       const keys=["NAME_2","ADM2_TR","ADM2_EN","ADM2_NAME","NAME_TR","NAME_TRK","ilce","ILCE","DISTRICT","DISTRICT_TR","NAME2","name","name:tr","NAME"];
@@ -329,13 +398,15 @@
     }
     function buildDistrictTooltip(p){
       const name = districtName(p) || 'İlçe';
-      if (renkliIlce){
+      const mode = document.getElementById('colorMode').value;
+      if (mode==='parti'){
         const parti= p.SecilenParti || "Belirtilmemiş";
         const oy   = p.SecilenOy!=null ? formatInt(p.SecilenOy) : "-";
         const oran = formatPercent(p.SecilenPartiOyOranı);
         return `<div style="font-size:13px"><b>${name}</b><br/>${parti}<br/><b>Oy:</b> ${oy} &nbsp; <b>Oran:</b> ${oran}</div>`;
       }
-      return `<div style="font-size:13px"><b>${name}</b></div>`;
+      const s = readSes(p);
+      return `<div style="font-size:13px"><b>${name}</b><br/><b>Ortalama SES Skoru:</b> ${formatSesInt(s)} ${sesEtiketi(s)}</div>`;
     }
 
     // === Boundaries ===
@@ -347,9 +418,12 @@
         PARTY_COLORS = data.party_colors || {};
         DEFAULT_COLOR = data.default_color || DEFAULT_COLOR;
 
+        const styleIl = f=>({ color:"#333", weight:1, fillColor: colorByMode(f.properties||{}), fillOpacity: renkAcil?0.75:0.05 });
+        const styleIlce = f=>({ color:"#666", weight:0.7, fillColor: colorByMode(f.properties||{}), fillOpacity: renkAcil?0.75:0.05 });
+
         ilLayer = L.geoJSON(data.il, {
           pane:'panePolygons',
-          style:f=>({ color:"#333", weight:1, fillColor: (currentMode==='il' && renkliIl) ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }),
+          style: styleIl,
           onEachFeature:(f,layer)=>{
             layer.bindTooltip('', { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
             layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildProvinceTooltip(f.properties||{})); });
@@ -366,7 +440,7 @@
 
         istIlceLayer = L.geoJSON(istanbulDistrictFC, {
           pane:'paneDistricts',
-          style:f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }),
+          style: styleIlce,
           onEachFeature:(f,layer)=>{
             layer.bindTooltip('', { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
             layer.on('tooltipopen', ()=>{ layer.getTooltip().setContent(buildDistrictTooltip(f.properties||{})); });
@@ -386,57 +460,52 @@
         fitTo(ilLayer);
         brandLayer.bringToFront();
         showBrandLegend(selectedBrands());
+        showLegend();
       });
 
-    // Mode change
+    // Mode change (il / ilce)
     document.getElementById("modeSelect").onchange = function(){
       currentMode = this.value;
       if (currentMode==='il'){
         if (istIlceLayer && map.hasLayer(istIlceLayer)) map.removeLayer(istIlceLayer);
         if (districtLabelsLayer && map.hasLayer(districtLabelsLayer)) map.removeLayer(districtLabelsLayer);
         if (ilLayer && !map.hasLayer(ilLayer)) ilLayer.addTo(map);
-        document.getElementById("toggleColors").innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
-        if (renkliIl) showPartyLegend(); else hidePartyLegend();
         fitTo(ilLayer);
       } else {
         if (ilLayer && map.hasLayer(ilLayer)) map.removeLayer(ilLayer);
         if (istIlceLayer && !map.hasLayer(istIlceLayer)) istIlceLayer.addTo(map);
         if (districtLabelsLayer && !map.hasLayer(districtLabelsLayer)) districtLabelsLayer.addTo(map);
-        document.getElementById("toggleColors").innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
-        if (renkliIlce) showPartyLegend(); else hidePartyLegend();
         fitTo(istIlceLayer);
       }
+      restylePolygons();
       brandLayer.bringToFront();
     };
 
-    // Color toggle
+    // Color mode change (parti / ust / ses)
+    document.getElementById("colorMode").addEventListener('change', ()=>{
+      restylePolygons();
+      showLegend();
+    });
+
+    // Renkleri kapat/aç
     document.getElementById("toggleColors").onclick = function(){
-      if (currentMode==='il'){
-        renkliIl = !renkliIl;
-        if (ilLayer){
-          ilLayer.setStyle(f=>({ color:"#333", weight:1, fillColor: renkliIl ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR, fillOpacity:0.7 }));
-        }
-        this.innerText = renkliIl ? "Sade Gösterim" : "Oy dağılımını göster";
-        if (renkliIl) showPartyLegend(); else hidePartyLegend();
-      } else {
-        renkliIlce = !renkliIlce;
-        if (istIlceLayer){
-          istIlceLayer.setStyle(f=>({ color:"#666", weight:0.7, fillOpacity: renkliIlce?0.75:0.05, fillColor: renkliIlce ? (f.properties?.color||DEFAULT_COLOR) : DEFAULT_COLOR }));
-        }
-        this.innerText = renkliIlce ? "Sade Gösterim" : "Oy dağılımını göster";
-        if (renkliIlce) showPartyLegend(); else hidePartyLegend();
-      }
-      brandLayer.bringToFront();
+      renkAcil = !renkAcil;
+      this.innerText = renkAcil ? "Renkleri kapat" : "Renkleri aç";
+      restylePolygons();
     };
 
-    // === Brands ===
-    function selectedBrands(){ return Array.from(document.querySelectorAll('.brandChk:checked')).map(el=>el.value); }
-
-    function radiusFromMetric(val, min, max){
-      if (val==null || isNaN(val) || min==null || max==null || max<=min) return 7;
-      const t = (val-min)/(max-min);
-      return 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); // 5..15 (taban)
+    function restylePolygons(){
+      const styler = f=>({ color:(currentMode==='il'?'#333':'#666'),
+        weight:(currentMode==='il'?1:0.7),
+        fillColor: colorByMode(f.properties||{}),
+        fillOpacity: renkAcil?0.75:0.05 });
+      if (currentMode==='il' && ilLayer) ilLayer.setStyle(styler);
+      if (currentMode==='ilce' && istIlceLayer) istIlceLayer.setStyle(styler);
     }
+
+    // === Brands === (aynı)
+    function selectedBrands(){ return Array.from(document.querySelectorAll('.brandChk:checked')).map(el=>el.value); }
+    function radiusFromMetric(val, min, max){ if (val==null || isNaN(val) || min==null || max==null || max<=min) return 7; const t=(val-min)/(max-min); return 5 + 10*Math.sqrt(Math.max(0, Math.min(1,t))); }
 
     function groupByCoord(points){
       const groups = new Map();
@@ -463,9 +532,7 @@
         acc += share;
         return `${brandColor(it.brand)} ${start}deg ${end}deg`;
       }).join(', ');
-
       const size = baseSize + Math.min(12, (items.length-1)*3);
-
       const html = `
         <div class="pie-wrap" style="width:${size}px;height:${size}px;">
           <div class="pie-scale">
@@ -473,10 +540,7 @@
               width:${size}px;height:${size}px;border-radius:50%;
               background: conic-gradient(${segments});
               border:1.5px solid #333; box-shadow:0 1px 4px rgba(0,0,0,.25); position:relative;">
-              <div style="
-                position:absolute; inset:22%;
-                border-radius:50%; background:rgba(255,255,255,.9);
-                border:1px solid rgba(0,0,0,.2);"></div>
+              <div style="position:absolute; inset:22%; border-radius:50%; background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.2);"></div>
             </div>
           </div>
         </div>`;
@@ -484,11 +548,7 @@
     }
 
     const BASE_ZOOM = 8;
-    function zoomFactor(){
-      const z = map.getZoom();
-      let f = Math.pow(1.12, (z - BASE_ZOOM));
-      return Math.max(0.9, Math.min(1.8, f));
-    }
+    function zoomFactor(){ const z = map.getZoom(); let f = Math.pow(1.12, (z - BASE_ZOOM)); return Math.max(0.9, Math.min(1.8, f)); }
     function applyZoomScaling(){
       const f = zoomFactor();
       brandLayer.eachLayer(layer=>{
@@ -520,16 +580,10 @@
       const metricKey = document.getElementById('metricSelect').value;
       let pts = allBrandPoints.filter(p=>brands.includes(p.brand));
       if (metricKey === 'IL_ILCE_ECOM_CIRO'){
-        pts = pts.filter(p => {
-          const v = Number(p.IL_ILCE_ECOM_CIRO);
-          return !isNaN(v) && v > 0;
-        });
+        pts = pts.filter(p => { const v = Number(p.IL_ILCE_ECOM_CIRO); return !isNaN(v) && v > 0; });
       }
 
-      const sumOf = (arr, key) => arr.reduce((acc,p)=>{
-        const v = Number(p[key]); return acc + (isNaN(v) ? 0 : v);
-      }, 0);
-
+      const sumOf = (arr, key) => arr.reduce((acc,p)=>{ const v = Number(p[key]); return acc + (isNaN(v) ? 0 : v); }, 0);
       const totalCiro     = sumOf(pts, 'IL_ILCE_CIRO');
       const totalAdet     = sumOf(pts, 'IL_ILCE_ADET');
       const totalEcomCiro = sumOf(pts, 'IL_ILCE_ECOM_CIRO');
@@ -538,12 +592,7 @@
       const totalFizAdet  = sumOf(pts, 'IL_ILCE_FIZIKI_ADET');
 
       const values = (metricKey==='none') ? [] : pts.map(p=>p[metricKey]).filter(v=>v!=null && !isNaN(v)).map(Number);
-      let stats = {
-        count: pts.length,
-        totalCiro, totalAdet,
-        totalEcomCiro, totalEcomAdet,
-        totalFizCiro,  totalFizAdet
-      };
+      let stats = { count: pts.length, totalCiro, totalAdet, totalEcomCiro, totalEcomAdet, totalFizCiro, totalFizAdet };
       let min=null, max=null, q33=null, q66=null;
       if (metricKey!=='none' && values.length){
         values.sort((a,b)=>a-b);
@@ -553,9 +602,8 @@
       }
 
       const groups = groupByCoord(pts);
-
       let smallCount=0, midCount=0, bigCount=0;
-      const bumpBucket = (v) => {
+      const bumpBucket = v => {
         if (metricKey==='none' || v==null || isNaN(v) || q33==null || q66==null) return;
         if (v <= q33) smallCount++; else if (v >= q66) bigCount++; else midCount++;
       };
@@ -570,9 +618,7 @@
         if (items.length === 1){
           const p = items[0];
           const color = brandColor(p.brand);
-          let r = 7;
           let baseR = 7;
-
           if (metricKey!=='none' && min!=null && max!=null && max>min){
             const v = (p[metricKey]==null || isNaN(p[metricKey])) ? null : Number(p[metricKey]);
             if (v!=null){
@@ -581,83 +627,47 @@
               bumpBucket(v);
             }
           }
-
-          r = Math.max(4, Math.min(22, baseR * zoomFactor()));
-
+          const r = Math.max(4, Math.min(22, baseR * zoomFactor()));
           const metricLabel = displayMetricName(metricKey);
           const metricLine = (metricKey!=='none')
             ? `<b>${metricLabel}:</b> ${p[metricKey]!=null ? formatInt(p[metricKey]) : 'Veri yok'}<br/>` : '';
-
           const blockEcom = `
-            <div style="margin-top:4px">
-              <div style="color:#666">E-Com</div>
-              <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_ECOM_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ECOM_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_ECOM_TICKET_SIZE)}</div>
-            </div>`;
-
+            <div style="margin-top:4px"><div style="color:#666">E-Com</div>
+            <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_ECOM_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ECOM_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_ECOM_TICKET_SIZE)}</div></div>`;
           const blockFiz = `
-            <div style="margin-top:4px">
-              <div style="color:#666">Fiziki</div>
-              <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_FIZIKI_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_FIZIKI_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_FIZIKI_TICKET_SIZE)}</div>
-            </div>`;
-
+            <div style="margin-top:4px"><div style="color:#666">Fiziki</div>
+            <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_FIZIKI_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_FIZIKI_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_FIZIKI_TICKET_SIZE)}</div></div>`;
           const legacyBlock = `
             <div style="margin-top:4px; color:#666">Toplam</div>
-            <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_TICKET_SIZE)}</div>
-          `;
+            <div><b>Ciro:</b> ${formatInt(p.IL_ILCE_CIRO)} &nbsp; <b>Adet:</b> ${formatInt(p.IL_ILCE_ADET)} &nbsp; <b>Ticket:</b> ${formatInt(p.IL_ILCE_TICKET_SIZE)}</div>`;
 
-          const html = `
-            <div style="font-size:13px">
-              <b>${displayBrandName(p.brand)}</b><br/>
-              ${p.BKM_IL_ILCE_NEW || ''}<br/>
-              ${metricLine}
-              ${blockEcom}
-              ${blockFiz}
-              ${legacyBlock}
-            </div>`;
-
+          const html = `<div style="font-size:13px"><b>${displayBrandName(p.brand)}</b><br/>${p.BKM_IL_ILCE_NEW || ''}<br/>${metricLine}${blockEcom}${blockFiz}${legacyBlock}</div>`;
           const marker = L.circleMarker([p.lat, p.lon], {
             pane:'paneMarkers', radius:r, color:'#333', weight:1, fillColor:color, fillOpacity:0.9
           }).bindTooltip(html, { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
-
           marker._baseR = baseR;
           brandLayer.addLayer(marker);
           return;
         }
 
-        // Çok markalı → donut
         const { html, size } = makePieIcon(items, metricKey, 22);
-
         const metricLabel = displayMetricName(metricKey);
-        const rows = items
-          .slice()
-          .sort((a,b)=>displayBrandName(a.brand).localeCompare(displayBrandName(b.brand),'tr'))
+        const rows = items.slice().sort((a,b)=>displayBrandName(a.brand).localeCompare(displayBrandName(b.brand),'tr'))
           .map(p=>{
             if (metricKey!=='none') bumpBucket(Number(p[metricKey]));
             const v = (metricKey!=='none' && p[metricKey]!=null) ? formatInt(p[metricKey]) : '—';
-            return `
-              <tr>
-                <td style="padding:2px 6px;">
-                  <span style="display:inline-block;width:10px;height:10px;background:${brandColor(p.brand)};border:1px solid rgba(0,0,0,.2);margin-right:6px"></span>
-                  ${displayBrandName(p.brand)}
-                </td>
-                <td style="padding:2px 0;text-align:right;"><b>${v}</b></td>
-              </tr>`;
+            return `<tr><td style="padding:2px 6px;">
+              <span style="display:inline-block;width:10px;height:10px;background:${brandColor(p.brand)};border:1px solid rgba(0,0,0,.2);margin-right:6px"></span>
+              ${displayBrandName(p.brand)}</td><td style="padding:2px 0;text-align:right;"><b>${v}</b></td></tr>`;
           }).join('');
-
         const locationText = (items.find(i => i.BKM_IL_ILCE_NEW) || {}).BKM_IL_ILCE_NEW || 'Konum';
-        const table = `
-          <div style="font-size:13px">
-            <b>${locationText}</b><br/>
-            <div style="margin:4px 0 2px; color:#666">${metricLabel}</div>
-            <table style="border-collapse:collapse">${rows}</table>
-            ${metricKey==='none' ? '<div style="color:#666;margin-top:4px">Dilimler eşit payda.</div>' : ''}
-          </div>`;
+        const table = `<div style="font-size:13px"><b>${locationText}</b><br/><div style="margin:4px 0 2px; color:#666">${metricLabel}</div>
+          <table style="border-collapse:collapse">${rows}</table>${metricKey==='none' ? '<div style="color:#666;margin-top:4px">Dilimler eşit payda.</div>' : ''}</div>`;
 
         const marker = L.marker([g.lat, g.lon], {
           pane:'paneMarkers',
           icon: L.divIcon({ className:'', html, iconSize:[size,size], iconAnchor:[size/2, size/2] })
         }).bindTooltip(table, { pane:'paneTop', direction:'top', sticky:true, opacity:0.95 });
-
         marker._isPie = true;
         brandLayer.addLayer(marker);
       });
