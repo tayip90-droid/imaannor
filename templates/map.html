@@ -252,6 +252,7 @@
 
     function showLegend(){
       legendControl = clearLegend(legendControl);
+      if (!renkAcil) return; // renk kapalıyken legend gösterme
       const mode = document.getElementById('colorMode').value;
 
       legendControl = L.control({ position:'bottomright' });
@@ -285,10 +286,11 @@
         // ses
         div.innerHTML = '<div class="title">Ortalama SES Skoru</div>';
         const items = [
-          [SES_GOOD, 'İyi (≥ 133)'],
-          [SES_BAD,  'Kötü (< 133)'],
+          [SES_GOOD, 'Yüksek (≥ 133)'],
+          [SES_BAD,  'Düşük (< 133)'],
           [DEFAULT_COLOR, 'Veri yok / Belirsiz']
         ];
+
         items.forEach(([c,lab])=>{
           const row = document.createElement('div'); row.className='item';
           row.innerHTML = `<span class="swatch" style="background:${c}"></span><span>${lab}</span>`;
@@ -378,6 +380,7 @@
     // === Tooltip içerikleri ===
     function buildProvinceTooltip(p){
       const name = p.NAME || p.name || 'İl';
+      if (!renkAcil) return `<div style="font-size:13px"><b>${name}</b></div>`; // << EKLENDİ
       const mode = document.getElementById('colorMode').value;
       if (mode==='parti'){
         const parti= p.SecilenParti || "Belirtilmemiş";
@@ -398,6 +401,7 @@
     }
     function buildDistrictTooltip(p){
       const name = districtName(p) || 'İlçe';
+      if (!renkAcil) return `<div style="font-size:13px"><b>${name}</b></div>`; // << EKLENDİ
       const mode = document.getElementById('colorMode').value;
       if (mode==='parti'){
         const parti= p.SecilenParti || "Belirtilmemiş";
@@ -492,6 +496,7 @@
       renkAcil = !renkAcil;
       this.innerText = renkAcil ? "Renkleri kapat" : "Renkleri aç";
       restylePolygons();
+      showLegend(); // << eklendi
     };
 
     function restylePolygons(){
